@@ -2,7 +2,7 @@ import React from 'react';
 import { Search, MessageSquare, Users, Settings, LogOut, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const Sidebar = ({ activeChat, setActiveChat, contacts, currentUser, unreadCounts, onOpenSettings, onLogout }) => {
+const Sidebar = ({ activeChat, setActiveChat, contacts, currentUser, unreadCounts, onOpenSettings, onAddUser, onLogout }) => {
   return (
     <div className="sidebar glass" style={{ width: 'var(--sidebar-width)', height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Sidebar Header */}
@@ -115,6 +115,7 @@ const Sidebar = ({ activeChat, setActiveChat, contacts, currentUser, unreadCount
       <motion.button
         whileHover={{ scale: 1.1, rotate: 90 }}
         whileTap={{ scale: 0.9 }}
+        onClick={onAddUser}
         style={{
           position: 'absolute',
           bottom: '100px',

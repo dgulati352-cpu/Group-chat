@@ -4,6 +4,7 @@ import ChatWindow from './components/ChatWindow';
 import Login from './components/Login';
 import CallModal from './components/CallModal';
 import SettingsModal from './components/SettingsModal';
+import AddUserModal from './components/AddUserModal';
 import { AnimatePresence } from 'framer-motion';
 import { auth, db, googleProvider, rtdb } from './firebase';
 import { 
@@ -42,6 +43,8 @@ function App() {
   const [users, setUsers] = useState([]);
   const [unreadCounts, setUnreadCounts] = useState({});
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [myContacts, setMyContacts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Auth Listener
@@ -183,9 +186,16 @@ function App() {
         setUsers(allUsers.filter(u => u.uid !== currentUser.uid));
       });
 
+      // 5. Fetch My Contacts
+      const contactsRef = collection(db, 'users', currentUser.uid, 'contacts');
+      const unsubscribeContacts = onSnapshot(contactsRef, (snapshot) => {
+        setMyContacts(snapshot.docs.map(doc => doc.id));
+      });
+
       return () => {
         unsubscribeCalls();
         unsubscribeUsers();
+        unsubscribeContacts();
       };
     }
   }, [currentUser]);
@@ -227,21 +237,30 @@ function App() {
       time: messages['global']?.slice(-1)[0]?.time || 'Now', 
       online: true 
     },
-    ...users.map(u => {
-      const pChatId = [currentUser.uid, u.uid].sort().join('_');
-      const lastMsg = messages[pChatId]?.slice(-1)[0];
-      const onlineInfo = onlineUsers.find(ou => ou.uid === u.uid);
-      
-      return {
-        id: u.uid,
-        uid: u.uid,
-        name: u.name,
-        avatar: u.avatar,
-        lastMessage: lastMsg?.image ? '📷 Photo' : (lastMsg?.audio ? '🎤 Voice' : (lastMsg?.text || 'No messages yet')),
-        time: lastMsg?.time || 'Now',
-        online: !!onlineInfo
-      };
-    })
+    ...users
+      .filter(u => {
+        // Show user if they are in my contacts
+        if (myContacts.includes(u.uid)) return true;
+        
+        // OR if I have an existing chat with them
+        const pChatId = [currentUser.uid, u.uid].sort().join('_');
+        return messages[pChatId] && messages[pChatId].length > 0;
+      })
+      .map(u => {
+        const pChatId = [currentUser.uid, u.uid].sort().join('_');
+        const lastMsg = messages[pChatId]?.slice(-1)[0];
+        const onlineInfo = onlineUsers.find(ou => ou.uid === u.uid);
+        
+        return {
+          id: u.uid,
+          uid: u.uid,
+          name: u.name,
+          avatar: u.avatar,
+          lastMessage: lastMsg?.image ? '📷 Photo' : (lastMsg?.audio ? '🎤 Voice' : (lastMsg?.text || 'No messages yet')),
+          time: lastMsg?.time || 'Now',
+          online: !!onlineInfo
+        };
+      })
   ];
 
   const startCall = async (isVideo = true) => {
@@ -438,6 +457,7 @@ function App() {
         currentUser={currentUser}
         unreadCounts={unreadCounts}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onAddUser={() => setIsAddUserOpen(true)}
         onLogout={handleLogout}
       />
       
@@ -472,6 +492,13 @@ function App() {
           onClose={() => setIsSettingsOpen(false)} 
           currentUser={currentUser}
           onUpdateProfile={() => {}} // Disabled for Google Auth for now
+        />
+
+        <AddUserModal 
+          isOpen={isAddUserOpen}
+          onClose={() => setIsAddUserOpen(false)}
+          currentUser={currentUser}
+          myContacts={myContacts}
         />
       </main>
     </div>
