@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Smile, Paperclip, MoreVertical, Phone, Video, Info, Mic, Square, ChevronLeft, Search, UserPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onClearChat, onVideoCall, onVoiceCall, currentUser, onBack, isMobile, onAddMemberClick }) => {
+const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onClearChat, onVideoCall, onVoiceCall, currentUser, onBack, isMobile, onAddMemberClick, allUsers = [] }) => {
   const [inputValue, setInputValue] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -21,6 +21,7 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onCl
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorder = useRef(null);
   const audioChunks = useRef([]);
+  const [showInfoMessageId, setShowInfoMessageId] = useState(null);
 
   const handleSend = () => {
     if (inputValue.trim()) {
@@ -344,6 +345,14 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onCl
                           Delete for everyone
                         </button>
                       )}
+                      {(activeChat.isGroup || activeChat.id === 'global') && (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setShowInfoMessageId(msg.id); setOpenedMenuId(null); }}
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--primary)' }}
+                        >
+                          Message Info
+                        </button>
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -351,6 +360,85 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onCl
             </motion.div>
           ))}
         </AnimatePresence>
+
+        {/* Message Info Overlay */}
+        <AnimatePresence>
+          {showInfoMessageId && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{ 
+                position: 'fixed', 
+                inset: 0, 
+                zIndex: 2000, 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                padding: '20px'
+              }}
+              onClick={() => setShowInfoMessageId(null)}
+            >
+              <div 
+                style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} 
+              />
+              <motion.div 
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                className="glass"
+                style={{ 
+                  position: 'relative', 
+                  width: '100%', 
+                  maxWidth: '400px', 
+                  padding: '24px', 
+                  borderRadius: '24px',
+                  boxShadow: '0 20px 50px rgba(0,0,0,0.3)'
+                }}
+                onClick={e => e.stopPropagation()}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--text-main)' }}>Message Info</h3>
+                  <button 
+                    onClick={() => setShowInfoMessageId(null)}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                  >
+                    <Square size={20} />
+                  </button>
+                </div>
+
+                <div style={{ marginBottom: '20px' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Seen By</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '300px', overflowY: 'auto' }}>
+                    {(() => {
+                      const msg = messages.find(m => m.id === showInfoMessageId);
+                      const seenBy = msg?.seenBy || [];
+                      const readers = allUsers.filter(u => seenBy.includes(u.uid) && u.uid !== msg.userUid);
+                      
+                      if (readers.length === 0) {
+                        return <p style={{ fontSize: '14px', color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>No one has seen this yet</p>;
+                      }
+
+                      return readers.map(user => (
+                        <div key={user.uid} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <img 
+                            src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=random`} 
+                            alt={user.name} 
+                            style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} 
+                          />
+                          <div style={{ flex: 1 }}>
+                            <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{user.name}</p>
+                            <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>Read</p>
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div ref={messagesEndRef} />
       </div>
 

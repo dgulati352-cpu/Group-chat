@@ -235,13 +235,19 @@ function App() {
     }
 
     const unreadMessages = (messages[chatId] || []).filter(
-      msg => msg.userUid !== currentUser.uid && !msg.read
+      msg => msg.userUid !== currentUser.uid && (!msg.seenBy || !msg.seenBy.includes(currentUser.uid))
     );
 
     if (unreadMessages.length > 0) {
       unreadMessages.forEach(async (msg) => {
         try {
-          await updateDoc(doc(db, 'messages', msg.id), { read: true });
+          const seenBy = msg.seenBy || [];
+          if (!seenBy.includes(currentUser.uid)) {
+            await updateDoc(doc(db, 'messages', msg.id), { 
+              read: true,
+              seenBy: [...seenBy, currentUser.uid]
+            });
+          }
         } catch (e) {
           console.error("Error marking message as read:", e);
         }
@@ -670,7 +676,8 @@ function App() {
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         deletedFor: [],
         deletedForEveryone: false,
-        read: activeChat.id === 'global' // Global messages are considered read for the sender instantly
+        read: activeChat.id === 'global', // Global messages are considered read for the sender instantly
+        seenBy: [currentUser.uid]
       });
 
       // Notify recipient for private messages
@@ -767,6 +774,7 @@ function App() {
         onBack={() => setShowChat(false)}
         isMobile={isMobile}
         onAddMemberClick={() => setIsAddMemberOpen(true)}
+        allUsers={users}
       />
 
         <AddMemberModal 
