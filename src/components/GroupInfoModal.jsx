@@ -31,6 +31,29 @@ const GroupInfoModal = ({ isOpen, onClose, group, currentUser, allUsers = [], on
     }
   };
 
+  const handleTransferAdmin = async (memberUid) => {
+    if (!window.confirm("Are you sure you want to transfer admin rights to this member? You will no longer be an admin.")) return;
+    try {
+      const groupRef = doc(db, 'groups', group.id);
+      // Ensure the new person is an admin
+      await updateDoc(groupRef, {
+        admins: arrayUnion(memberUid)
+      });
+      // Remove current user from admins
+      await updateDoc(groupRef, {
+        admins: arrayRemove(currentUser.uid)
+      });
+      // Optional: Update createdBy if you want to transfer "ownership"
+      await updateDoc(groupRef, {
+        createdBy: memberUid
+      });
+      setOpenedMemberMenuId(null);
+    } catch (error) {
+      console.error("Error transferring admin:", error);
+      alert("Failed to transfer admin rights");
+    }
+  };
+
   const handleRemoveMember = async (memberUid) => {
     if (!window.confirm("Are you sure you want to remove this member?")) return;
     try {
@@ -205,6 +228,12 @@ const GroupInfoModal = ({ isOpen, onClose, group, currentUser, allUsers = [], on
                                     <ShieldCheck size={16} /> Make group admin
                                   </button>
                                 )}
+                                <button 
+                                  onClick={() => handleTransferAdmin(user.uid)}
+                                  style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}
+                                >
+                                  <ShieldCheck size={16} /> Transfer Admin
+                                </button>
                                 <button 
                                   onClick={() => handleRemoveMember(user.uid)}
                                   style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px' }}
