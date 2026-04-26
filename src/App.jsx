@@ -18,7 +18,8 @@ import {
 } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 
-const socket = io('http://localhost:3001', { autoConnect: false });
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+const socket = io(SOCKET_URL, { autoConnect: false });
 
 const iceServers = {
   iceServers: [
