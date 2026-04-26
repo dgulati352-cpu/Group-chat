@@ -59,14 +59,13 @@ const SettingsModal = ({ isOpen, onClose, currentUser, onUpdateProfile }) => {
 
             <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '32px', textAlign: 'center' }}>Profile Settings</h2>
 
-            <div style={{ position: 'relative', width: '120px', height: '120px', margin: '0 auto 32px' }}>
+            <div style={{ position: 'relative', width: '120px', height: '120px', margin: '0 auto 12px' }}>
               <img 
                 src={avatar} 
                 alt="Avatar" 
-                style={{ width: '120px', height: '120px', borderRadius: '35px', border: '3px solid var(--primary)', padding: '4px' }} 
+                style={{ width: '120px', height: '120px', borderRadius: '35px', border: '3px solid var(--primary)', padding: '4px', objectFit: 'cover' }} 
               />
-              <button 
-                onClick={refreshAvatar}
+              <label 
                 style={{ 
                   position: 'absolute', 
                   bottom: '-5px', 
@@ -75,10 +74,33 @@ const SettingsModal = ({ isOpen, onClose, currentUser, onUpdateProfile }) => {
                   color: 'white', 
                   padding: '10px', 
                   borderRadius: '12px',
-                  boxShadow: '0 4px 10px rgba(139, 92, 246, 0.4)'
+                  boxShadow: '0 4px 10px rgba(139, 92, 246, 0.4)',
+                  cursor: 'pointer'
                 }}
               >
                 <Camera size={20} />
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = () => setAvatar(reader.result);
+                      reader.readAsDataURL(file);
+                    }
+                  }} 
+                  style={{ display: 'none' }} 
+                />
+              </label>
+            </div>
+            
+            <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+              <button 
+                onClick={refreshAvatar}
+                style={{ background: 'transparent', border: 'none', color: 'var(--primary)', fontSize: '13px', cursor: 'pointer', fontWeight: '500' }}
+              >
+                Shuffle Avatar
               </button>
             </div>
 
