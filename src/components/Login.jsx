@@ -34,7 +34,7 @@ const Login = ({ onLogin }) => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="glass"
-        style={{ padding: '40px', borderRadius: '24px', width: '100%', maxWidth: '400px', textAlign: 'center' }}
+        style={{ padding: '40px var(--side-padding, 40px)', borderRadius: '24px', width: '90%', maxWidth: '400px', textAlign: 'center' }}
       >
         <h1 style={{ fontSize: '32px', fontWeight: '800', marginBottom: '8px', background: 'linear-gradient(to right, #8b5cf6, #2dd4bf)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
           Nebula Chat

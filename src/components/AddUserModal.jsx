@@ -71,16 +71,16 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
             className="glass"
-            style={{ width: '100%', maxWidth: '500px', borderRadius: '24px', position: 'relative', overflow: 'hidden' }}
+            style={{ width: '95%', maxWidth: '500px', borderRadius: '24px', position: 'relative', overflow: 'hidden' }}
           >
-            <div style={{ padding: '24px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '24px var(--side-padding, 24px)', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ fontSize: '20px', fontWeight: '700' }}>Add New Contact</h2>
               <button onClick={onClose} className="glass-hover" style={{ padding: '8px', borderRadius: '10px' }}>
                 <X size={20} />
               </button>
             </div>
 
-            <div style={{ padding: '24px' }}>
+            <div style={{ padding: '24px var(--side-padding, 24px)' }}>
               <div style={{ position: 'relative', marginBottom: '24px' }}>
                 <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input 

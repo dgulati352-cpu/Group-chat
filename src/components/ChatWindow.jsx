@@ -107,7 +107,7 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onCl
       backgroundBlendMode: 'overlay'
     }}>
       {/* Chat Header */}
-      <div className="glass" style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', zIndex: 5 }}>
+      <div className="glass" style={{ padding: '12px var(--side-padding, 16px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', zIndex: 5 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {isMobile && (
             <button onClick={onBack} className="glass-hover" style={{ padding: '8px', borderRadius: '10px', color: 'var(--text-muted)', marginRight: '-4px' }}>
@@ -164,7 +164,7 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onCl
       </div>
 
       {/* Messages Feed */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px' : '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px var(--side-padding, 24px)', display: 'flex', flexDirection: 'column', gap: '12px' }} className="custom-scrollbar">
         <AnimatePresence initial={false}>
           {Array.isArray(messages) && messages
             .filter(msg => !msg.deletedFor?.includes(currentUser.uid))
@@ -262,7 +262,7 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onCl
       </div>
 
       {/* Message Input Area */}
-      <div style={{ padding: isMobile ? '12px' : '20px 24px', background: 'transparent' }}>
+      <div style={{ padding: '12px var(--side-padding, 24px)', background: 'transparent' }}>
         <div className="glass" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px', borderRadius: '16px' }}>
           <label className="glass-hover" style={{ padding: '10px', borderRadius: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}>
             <Paperclip size={20} />

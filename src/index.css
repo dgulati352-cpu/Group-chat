@@ -36,19 +36,25 @@
   box-sizing: border-box;
 }
 
-body {
+html, body, #root {
+  width: 100%;
+  height: 100%;
   margin: 0;
-  display: flex;
-  min-width: 320px;
-  min-height: 100vh;
+  padding: 0;
   overflow: hidden;
+}
+
+body {
+  display: flex;
   background: radial-gradient(circle at top right, #1e1b4b, #020617);
 }
 
-#root {
-  width: 100%;
-  height: 100vh;
+.app-container {
   display: flex;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
 }
 
 /* Glassmorphism Utility */
@@ -124,7 +130,7 @@ input:focus {
 /* Responsive Layout */
 @media (max-width: 768px) {
   :root {
-    --sidebar-width: 100%;
+    --sidebar-width: 100vw;
   }
 
   .mobile-hidden {
@@ -132,17 +138,46 @@ input:focus {
   }
 
   .mobile-full {
-    width: 100% !important;
-    position: absolute;
+    width: 100vw !important;
+    position: fixed;
     top: 0;
     left: 0;
-    height: 100%;
+    height: 100vh;
     z-index: 50;
   }
 
   .app-container {
     flex-direction: column;
+    height: 100dvh;
+    width: 100vw;
+    position: fixed;
+    top: 0;
+    left: 0;
   }
+  
+  .sidebar, main {
+    width: 100vw !important;
+    height: 100% !important;
+    flex: 1;
+    --side-padding: 16px;
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .message-bubble {

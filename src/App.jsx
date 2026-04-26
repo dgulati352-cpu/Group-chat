@@ -497,7 +497,7 @@ function App() {
   }
 
   return (
-    <div className="app-container" style={{ display: 'flex', width: '100%', height: '100vh', overflow: 'hidden' }}>
+    <div className="app-container">
       <Sidebar 
         activeChat={activeChat} 
         setActiveChat={selectChat} 
