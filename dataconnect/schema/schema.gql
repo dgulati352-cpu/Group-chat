@@ -1,0 +1,37 @@
+type User @table {
+  username: String!
+  email: String!
+  passwordHash: String!
+  createdAt: Timestamp!
+  displayName: String
+  photoUrl: String
+  statusMessage: String
+  lastOnline: Timestamp
+}
+
+type Contact @table(key: ["owner", "contactUser"]) {
+  owner: User!
+  contactUser: User!
+  createdAt: Timestamp!
+  nickname: String
+}
+
+type Message @table {
+  sender: User!
+  receiver: User!
+  content: String!
+  messageType: String!
+  createdAt: Timestamp!
+  mediaUrl: String
+  seenAt: Timestamp
+}
+
+type CallLog @table {
+  caller: User!
+  receiver: User!
+  callType: String!
+  duration: Int64!
+  status: String!
+  createdAt: Timestamp!
+  endTime: Timestamp
+}
