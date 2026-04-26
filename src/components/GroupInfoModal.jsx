@@ -35,17 +35,14 @@ const GroupInfoModal = ({ isOpen, onClose, group, currentUser, allUsers = [], on
     if (!window.confirm("Are you sure you want to transfer admin rights to this member? You will no longer be an admin.")) return;
     try {
       const groupRef = doc(db, 'groups', group.id);
-      // Ensure the new person is an admin
+      // Ensure the new person is an admin and transfer ownership in one call
       await updateDoc(groupRef, {
-        admins: arrayUnion(memberUid)
+        admins: arrayUnion(memberUid),
+        createdBy: memberUid
       });
-      // Remove current user from admins
+      // Remove current user from admins in a separate call (as same field cannot be updated twice in one updateDoc)
       await updateDoc(groupRef, {
         admins: arrayRemove(currentUser.uid)
-      });
-      // Optional: Update createdBy if you want to transfer "ownership"
-      await updateDoc(groupRef, {
-        createdBy: memberUid
       });
       setOpenedMemberMenuId(null);
     } catch (error) {
@@ -152,7 +149,7 @@ const GroupInfoModal = ({ isOpen, onClose, group, currentUser, allUsers = [], on
             </div>
 
             {/* Members List */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 24px' }} className="custom-scrollbar">
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 80px' }} className="custom-scrollbar">
               <h3 style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '16px' }}>Participants</h3>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -205,38 +202,46 @@ const GroupInfoModal = ({ isOpen, onClose, group, currentUser, allUsers = [], on
                                   position: 'absolute', 
                                   right: 0, 
                                   top: '100%', 
-                                  zIndex: 10, 
-                                  minWidth: '180px', 
-                                  padding: '8px', 
-                                  borderRadius: '16px',
-                                  boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
-                                  marginTop: '4px'
+                                  zIndex: 100, 
+                                  minWidth: '200px', 
+                                  padding: '6px', 
+                                  borderRadius: '18px',
+                                  boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+                                  marginTop: '8px',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '2px',
+                                  border: '1px solid var(--glass-border)'
                                 }}
                               >
                                 {isMemberAdmin ? (
                                   <button 
                                     onClick={() => handleUpdateRole(user.uid, false)}
-                                    style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}
+                                    className="glass-hover"
+                                    style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '10px' }}
                                   >
                                     <ShieldAlert size={16} /> Dismiss as admin
                                   </button>
                                 ) : (
                                   <button 
                                     onClick={() => handleUpdateRole(user.uid, true)}
-                                    style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}
+                                    className="glass-hover"
+                                    style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '10px' }}
                                   >
                                     <ShieldCheck size={16} /> Make group admin
                                   </button>
                                 )}
                                 <button 
                                   onClick={() => handleTransferAdmin(user.uid)}
-                                  style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}
+                                  className="glass-hover"
+                                  style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}
                                 >
                                   <ShieldCheck size={16} /> Transfer Admin
                                 </button>
                                 <button 
                                   onClick={() => handleRemoveMember(user.uid)}
-                                  style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px' }}
+                                  className="glass-hover"
+                                  style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '10px' }}
                                 >
                                   <UserMinus size={16} /> Remove from group
                                 </button>
