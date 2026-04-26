@@ -61,14 +61,20 @@ const CallModal = ({ isIncoming, caller, onAccept, onReject, onEnd, localStream,
         
         {/* Video Area */}
         <div className="glass" style={{ flex: 1, borderRadius: '32px', overflow: 'hidden', position: 'relative', background: '#000' }}>
-          {remoteStream ? (
-            <video 
-              ref={remoteVideoRef} 
-              autoPlay 
-              playsInline 
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-            />
-          ) : (
+          {/* Always keep the video element in the DOM to maintain the stream connection */}
+          <video 
+            ref={remoteVideoRef} 
+            autoPlay 
+            playsInline 
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              objectFit: 'cover',
+              display: (remoteStream && remoteStream.getVideoTracks().length > 0) ? 'block' : 'none'
+            }} 
+          />
+
+          {!(remoteStream && remoteStream.getVideoTracks().length > 0) && (
             <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <motion.img 
                 animate={{ scale: [1, 1.05, 1] }}
@@ -77,8 +83,14 @@ const CallModal = ({ isIncoming, caller, onAccept, onReject, onEnd, localStream,
                 style={{ width: '150px', height: '150px', borderRadius: '50%', border: '4px solid var(--primary)', padding: '8px' }} 
               />
               <h2 style={{ marginTop: '24px', fontSize: '24px', fontWeight: '700' }}>
-                {isIncoming ? `Incoming Call from ${caller?.name}` : `Calling ${caller?.name}...`}
+                {remoteStream ? 'Voice Call Connected' : (isIncoming ? `Incoming Call from ${caller?.name}` : `Calling ${caller?.name}...`)}
               </h2>
+              {!remoteStream && !isIncoming && (
+                <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>Waiting for response...</p>
+              )}
+              {!remoteStream && isIncoming && (
+                <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>Connecting...</p>
+              )}
             </div>
           )}
 

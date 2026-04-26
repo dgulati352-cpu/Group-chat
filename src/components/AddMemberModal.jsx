@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Search, UserPlus, Check } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, query, getDocs, where, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, getDocs, where, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 
-const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
+const AddMemberModal = ({ isOpen, onClose, group, currentUser, contacts = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -29,13 +29,12 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
         getDocs(nameQuery)
       ]);
 
-      const emailResults = emailSnap.docs.map(doc => doc.data());
-      const nameResults = nameSnap.docs.map(doc => doc.data());
+      const emailResults = emailSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const nameResults = nameSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
-      // Merge and deduplicate
       const combined = [...emailResults, ...nameResults];
       const unique = Array.from(new Map(combined.map(u => [u.uid, u])).values())
-        .filter(user => user.uid !== currentUser?.uid);
+        .filter(user => user.uid !== currentUser?.uid && !group?.members?.includes(user.uid));
       
       setSearchResults(unique);
     } catch (error) {
@@ -44,30 +43,27 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
     setLoading(false);
   };
 
-  const toggleContact = async (user) => {
-    const isContact = myContacts.includes(user.uid);
-    const contactRef = doc(db, 'users', currentUser.uid, 'contacts', user.uid);
-    
+  const addMember = async (user) => {
     try {
-      if (isContact) {
-        await deleteDoc(contactRef);
-      } else {
-        await setDoc(contactRef, {
-          uid: user.uid,
-          name: user.name,
-          email: user.email,
-          avatar: user.avatar,
-          addedAt: new Date().toISOString()
-        });
-      }
+      const groupRef = doc(db, 'groups', group.id);
+      await updateDoc(groupRef, {
+        members: arrayUnion(user.uid)
+      });
+      // Update UI: remove from search results
+      setSearchResults(prev => prev.filter(u => u.uid !== user.uid));
     } catch (error) {
-      console.error("Error toggling contact:", error);
+      console.error("Error adding member:", error);
+      alert("Failed to add member");
     }
   };
 
   useEffect(() => {
-    if (!searchTerm) setSearchResults([]);
-  }, [searchTerm]);
+    if (!searchTerm) {
+      // Show contacts who are not already in the group
+      const availableContacts = (contacts || []).filter(u => !group?.members?.includes(u.uid));
+      setSearchResults(availableContacts.slice(0, 10));
+    }
+  }, [searchTerm, contacts, group]);
 
   return (
     <AnimatePresence>
@@ -88,20 +84,23 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
             className="glass"
             style={{ width: '95%', maxWidth: '500px', borderRadius: '24px', position: 'relative', overflow: 'hidden' }}
           >
-            <div style={{ padding: '24px var(--side-padding, 24px)', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: '700' }}>Add New Contact</h2>
+            <div style={{ padding: '24px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ fontSize: '20px', fontWeight: '700' }}>Add to {group?.name || 'Group'}</h2>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Select members to add to the group</p>
+              </div>
               <button onClick={onClose} className="glass-hover" style={{ padding: '8px', borderRadius: '10px' }}>
                 <X size={20} />
               </button>
             </div>
 
-            <div style={{ padding: '24px var(--side-padding, 24px)' }}>
+            <div style={{ padding: '24px' }}>
               <div style={{ position: 'relative', marginBottom: '24px', display: 'flex', gap: '8px' }}>
                 <div style={{ position: 'relative', flex: 1 }}>
                   <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                   <input 
                     type="text" 
-                    placeholder="Search by name or email..." 
+                    placeholder="Search people..." 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -110,50 +109,62 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
                 </div>
                 <button 
                   onClick={handleSearch}
+                  className="primary-button"
                   style={{ 
                     padding: '0 20px', 
                     borderRadius: '12px', 
                     background: 'var(--primary)', 
                     color: 'white', 
-                    fontWeight: '600' 
+                    fontWeight: '600',
+                    border: 'none',
+                    cursor: 'pointer'
                   }}
                 >
                   Search
                 </button>
               </div>
 
-              <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+              <div style={{ maxHeight: '350px', overflowY: 'auto' }} className="custom-scrollbar">
                 {loading ? (
                   <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>Searching...</div>
                 ) : searchResults.length > 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {searchResults.map(user => (
-                      <div key={user.uid} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)' }}>
-                        <img src={user.avatar} alt={user.name} style={{ width: '40px', height: '40px', borderRadius: '10px' }} />
+                      <div key={user.uid} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)' }}>
+                        <img src={user.avatar} alt={user.name} style={{ width: '44px', height: '44px', borderRadius: '12px', objectFit: 'cover' }} />
                         <div style={{ flex: 1 }}>
-                          <p style={{ fontWeight: '600', fontSize: '14px' }}>{user.name}</p>
+                          <p style={{ fontWeight: '600', fontSize: '15px' }}>{user.name}</p>
                           <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{user.email}</p>
                         </div>
                         <button 
-                          onClick={() => toggleContact(user)}
+                          onClick={() => addMember(user)}
                           style={{ 
-                            padding: '8px', 
-                            borderRadius: '10px', 
-                            background: myContacts.includes(user.uid) ? 'var(--accent)' : 'var(--primary)',
+                            padding: '10px', 
+                            borderRadius: '12px', 
+                            background: 'var(--primary)',
                             color: 'white',
                             border: 'none',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.2)'
                           }}
                         >
-                          {myContacts.includes(user.uid) ? <Check size={18} /> : <UserPlus size={18} />}
+                          <UserPlus size={18} />
                         </button>
                       </div>
                     ))}
                   </div>
                 ) : searchTerm && !loading ? (
-                  <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>No users found</div>
+                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                    <Search size={40} style={{ opacity: 0.2, marginBottom: '12px' }} />
+                    <p>No new users found</p>
+                  </div>
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>Enter an email to start searching</div>
+                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                    <p>Select from your contacts or search above</p>
+                  </div>
                 )}
               </div>
             </div>
@@ -164,4 +175,4 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
   );
 };
 
-export default AddUserModal;
+export default AddMemberModal;

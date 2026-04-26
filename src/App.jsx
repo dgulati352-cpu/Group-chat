@@ -5,8 +5,11 @@ import Login from './components/Login';
 import CallModal from './components/CallModal';
 import SettingsModal from './components/SettingsModal';
 import AddUserModal from './components/AddUserModal';
+import CreateGroupModal from './components/CreateGroupModal';
+import AddMemberModal from './components/AddMemberModal';
 import { AnimatePresence } from 'framer-motion';
-import { auth, db, googleProvider, rtdb } from './firebase';
+import { auth, db, googleProvider, rtdb, messaging } from './firebase';
+import { getToken, onMessage } from 'firebase/messaging';
 import { 
   collection, 
   addDoc, 
@@ -45,9 +48,15 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [myContacts, setMyContacts] = useState([]);
+  const [callHistory, setCallHistory] = useState([]);
+  const [sidebarTab, setSidebarTab] = useState('chats'); // 'chats' or 'calls'
   const [loading, setLoading] = useState(true);
   const [showChat, setShowChat] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+  const [myGroups, setMyGroups] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -64,6 +73,8 @@ function App() {
           name: user.displayName,
           avatar: user.photoURL,
           email: user.email,
+          searchEmail: user.email.toLowerCase(),
+          searchName: user.displayName.toLowerCase(),
           lastSeen: serverTimestamp()
         };
         
@@ -83,6 +94,72 @@ function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Messaging / Notification Setup
+  useEffect(() => {
+    if (currentUser && messaging) {
+      const setupNotifications = async () => {
+        try {
+          const permission = await Notification.requestPermission();
+          if (permission === 'granted') {
+            // Register service worker explicitly for more reliability
+            const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+            
+            const vapidKey = "BKe1M_m-XQO9K7Lw4B1e4n6V7k7_8_9_0_1_2_3_4_5_6_7_8_9_0";
+            
+            // Only attempt to get token if VAPID key doesn't look like our placeholder
+            if (vapidKey && !vapidKey.includes("_")) {
+              const token = await getToken(messaging, { 
+                serviceWorkerRegistration: registration,
+                vapidKey
+              });
+
+              if (token) {
+                console.log("FCM Token:", token);
+                await updateDoc(doc(db, 'users', currentUser.uid), { fcmToken: token });
+              }
+            } else {
+              console.warn("FCM VAPID key is a placeholder, skipping token generation.");
+            }
+          }
+        } catch (err) {
+          console.error("FCM setup error:", err);
+        }
+      };
+
+      setupNotifications();
+
+      const unsubscribe = onMessage(messaging, (payload) => {
+        console.log("Foreground message:", payload);
+        // Browser notification if app is in foreground but tab is hidden
+        if (document.hidden) {
+          new Notification(payload.notification.title, {
+            body: payload.notification.body,
+            icon: payload.notification.image
+          });
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, [currentUser]);
+
+  const sendPushNotification = async (targetUid, title, body, data = {}) => {
+    if (targetUid === 'global' || !currentUser) return;
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        to: targetUid,
+        from: currentUser.uid,
+        fromName: currentUser.name,
+        title,
+        body,
+        data,
+        createdAt: serverTimestamp(),
+        status: 'pending'
+      });
+    } catch (e) {
+      console.error("Error queueing notification:", e);
+    }
+  };
 
   // Set default active chat
   useEffect(() => {
@@ -106,12 +183,6 @@ function App() {
         if (change.type === "added") {
           const data = change.doc.data();
           const chatId = data.chatId;
-          
-          // Increment unread count if it's a new message and not for the active chat
-          if (data.userUid !== currentUser.uid && activeChat?.id !== chatId && activeChat?.id !== data.userUid) {
-             // For private chats, the activeChat.id might be the socket ID or UID. 
-             // This logic needs to be robust. For now, let's just update the messages state.
-          }
         }
       });
 
@@ -122,12 +193,61 @@ function App() {
         newMessages[chatId].push({ id: doc.id, ...data });
       });
       setMessages(newMessages);
+    }, (error) => {
+      console.error("Messages snapshot error:", error);
     });
 
     return () => unsubscribe();
   }, [currentUser]);
 
+  // Call History Listener
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Listen for calls involving the user
+    const qFrom = query(collection(db, 'calls'), where('from', '==', currentUser.uid), orderBy('createdAt', 'desc'));
+    const qTo = query(collection(db, 'calls'), where('to', '==', currentUser.uid), orderBy('createdAt', 'desc'));
+
+    const updateCalls = (snapshot, type) => {
+      setCallHistory(prev => {
+        const otherType = type === 'from' ? 'to' : 'from';
+        const otherCalls = prev.filter(c => c.type === otherType);
+        const currentCalls = snapshot.docs.map(doc => ({ id: doc.id, type, ...doc.data() }));
+        return [...otherCalls, ...currentCalls].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      });
+    };
+
+    const unsubFrom = onSnapshot(qFrom, (snap) => updateCalls(snap, 'from'), (err) => console.error("CallHistory from error:", err));
+    const unsubTo = onSnapshot(qTo, (snap) => updateCalls(snap, 'to'), (err) => console.error("CallHistory to error:", err));
+
+    return () => { unsubFrom(); unsubTo(); };
+  }, [currentUser]);
+
   const [onlineUsers, setOnlineUsers] = useState([]);
+
+  // Mark messages as read
+  useEffect(() => {
+    if (!currentUser || !activeChat || activeChat.id === 'global') return;
+
+    let chatId = activeChat.id;
+    if (!activeChat.isGroup) {
+      chatId = [currentUser.uid, activeChat.id].sort().join('_');
+    }
+
+    const unreadMessages = (messages[chatId] || []).filter(
+      msg => msg.userUid !== currentUser.uid && !msg.read
+    );
+
+    if (unreadMessages.length > 0) {
+      unreadMessages.forEach(async (msg) => {
+        try {
+          await updateDoc(doc(db, 'messages', msg.id), { read: true });
+        } catch (e) {
+          console.error("Error marking message as read:", e);
+        }
+      });
+    }
+  }, [activeChat, messages, currentUser]);
 
   // Presence and User Discovery
   useEffect(() => {
@@ -153,24 +273,37 @@ function App() {
       // 2. Listen to ALL users' presence
       const allStatusRef = ref(rtdb, '/status');
       onValue(allStatusRef, (snapshot) => {
-        const statuses = snapshot.val() || {};
-        const onlineList = Object.entries(statuses)
-          .filter(([uid, data]) => data.state === 'online')
-          .map(([uid, data]) => ({ uid, ...data }));
-        setOnlineUsers(onlineList);
+        setOnlineUsers(snapshot.val() || {});
       });
 
-      // 3. Firestore Call Signaling Listener
+      // 3. Groups Listener
+      const groupsQuery = query(
+        collection(db, 'groups'),
+        where('members', 'array-contains', currentUser.uid)
+      );
+
+      const unsubscribeGroups = onSnapshot(groupsQuery, (snapshot) => {
+        const groupsList = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          isGroup: true
+        }));
+        setMyGroups(groupsList);
+      }, (err) => console.error("Groups snapshot error:", err));
+
+      // 4. Firestore Call Signaling Listener
       const callsQuery = query(
         collection(db, 'calls'),
-        where('to', '==', currentUser.uid),
-        where('status', '==', 'pending')
+        where('to', '==', currentUser.uid)
       );
 
       const unsubscribeCalls = onSnapshot(callsQuery, (snapshot) => {
         snapshot.docChanges().forEach(async (change) => {
           const data = change.doc.data();
-          if (change.type === 'added') {
+          if (change.type === 'added' && data.status === 'pending') {
+            // Don't show incoming call if already in a call
+            if (currentCallId.current) return;
+
             setCallState({
               active: true,
               incoming: true,
@@ -179,29 +312,37 @@ function App() {
               callId: change.doc.id,
               offer: JSON.parse(data.offer)
             });
-          } else if (change.type === 'modified' || change.type === 'removed') {
-            if (data.status === 'ended' || data.status === 'rejected' || change.type === 'removed') {
-              setCallState({ active: false, incoming: false, caller: null, isVideo: false, callId: null, offer: null });
+            currentCallId.current = change.doc.id;
+          } else if (change.type === 'modified') {
+            if (data.status === 'ended' || data.status === 'rejected') {
+              if (currentCallId.current === change.doc.id) {
+                endCall();
+              }
+            }
+          } else if (change.type === 'removed') {
+            if (currentCallId.current === change.doc.id) {
+              endCall();
             }
           }
         });
-      });
+      }, (err) => console.error("Incoming calls error:", err));
 
       // 4. Firestore Discovery (Users List)
       const q = query(collection(db, 'users'));
       const unsubscribeUsers = onSnapshot(q, (snapshot) => {
         const allUsers = snapshot.docs.map(doc => doc.data());
         setUsers(allUsers.filter(u => u.uid !== currentUser.uid));
-      });
+      }, (err) => console.error("Users list error:", err));
 
       // 5. Fetch My Contacts
       const contactsRef = collection(db, 'users', currentUser.uid, 'contacts');
       const unsubscribeContacts = onSnapshot(contactsRef, (snapshot) => {
         setMyContacts(snapshot.docs.map(doc => doc.id));
-      });
+      }, (err) => console.error("Contacts error:", err));
 
       return () => {
         unsubscribeCalls();
+        unsubscribeGroups();
         unsubscribeUsers();
         unsubscribeContacts();
       };
@@ -220,6 +361,7 @@ function App() {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const pc = useRef(null);
+  const currentCallId = useRef(null);
 
   const initPeerConnection = (callId, type) => {
     pc.current = new RTCPeerConnection(iceServers);
@@ -232,11 +374,24 @@ function App() {
     };
 
     pc.current.ontrack = (event) => {
-      setRemoteStream(event.streams[0]);
+      console.log('Got remote track:', event.track.kind);
+      setRemoteStream(prev => {
+        if (prev) {
+          prev.addTrack(event.track);
+          return prev;
+        }
+        return event.streams[0] || new MediaStream([event.track]);
+      });
     };
   };
 
-  const contacts = [
+  if (loading) return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#020617', color: 'white' }}>Loading Nebula...</div>;
+
+  if (!currentUser) {
+    return <Login onLogin={() => {}} />;
+  }
+
+  const allContacts = [
     { 
       id: 'global', 
       name: 'Nebula Global', 
@@ -251,25 +406,40 @@ function App() {
         if (myContacts.includes(u.uid)) return true;
         
         // OR if I have an existing chat with them
-        const pChatId = [currentUser.uid, u.uid].sort().join('_');
+        const pChatId = [currentUser?.uid, u.uid].sort().join('_');
         return messages[pChatId] && messages[pChatId].length > 0;
       })
       .map(u => {
-        const pChatId = [currentUser.uid, u.uid].sort().join('_');
+        const pChatId = [currentUser?.uid, u.uid].sort().join('_');
         const lastMsg = messages[pChatId]?.slice(-1)[0];
-        const onlineInfo = onlineUsers.find(ou => ou.uid === u.uid);
+        const statusInfo = onlineUsers[u.uid];
         
         return {
           id: u.uid,
           uid: u.uid,
           name: u.name,
+          email: u.email,
           avatar: u.avatar,
           lastMessage: lastMsg?.image ? '📷 Photo' : (lastMsg?.audio ? '🎤 Voice' : (lastMsg?.text || 'No messages yet')),
           time: lastMsg?.time || 'Now',
-          online: !!onlineInfo
+          online: statusInfo?.state === 'online',
+          lastSeen: statusInfo?.last_changed || u.lastSeen
         };
-      })
+      }),
+    ...myGroups.map(g => {
+      const lastMsg = messages[g.id]?.slice(-1)[0];
+      return {
+        ...g,
+        lastMessage: lastMsg?.image ? '📷 Photo' : (lastMsg?.audio ? '🎤 Voice' : (lastMsg?.text || 'No messages yet')),
+        time: lastMsg?.time || 'Now',
+      };
+    })
   ];
+
+  const filteredContacts = allContacts.filter(c => 
+    (c.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (c.lastMessage?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+  );
 
   const startCall = async (isVideo = true) => {
     if (!activeChat || activeChat.id === 'global') return;
@@ -288,22 +458,24 @@ function App() {
 
       initPeerConnection(callId, 'callerCandidates');
       stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
-      
-      const offer = await pc.current.createOffer();
-      await pc.current.setLocalDescription(offer);
-      
-      const callData = {
+
+      await pc.current.setLocalDescription(await pc.current.createOffer());
+
+      await setDoc(callDoc, {
+        offer: JSON.stringify(pc.current.localDescription),
         from: currentUser.uid,
-        fromUser: currentUser,
+        fromUser: {
+          uid: currentUser.uid,
+          name: currentUser.name,
+          avatar: currentUser.avatar
+        },
         to: targetUser.uid,
         status: 'pending',
-        offer: JSON.stringify(offer),
         isVideo,
         createdAt: serverTimestamp()
-      };
+      });
 
-      await setDoc(callDoc, callData);
-
+      currentCallId.current = callId;
       setCallState({ 
         active: true, 
         incoming: false, 
@@ -312,19 +484,27 @@ function App() {
         callId
       });
 
+      // Send Push Notification if recipient is not online or to ensure they see it
+      sendPushNotification(
+        targetUser.uid,
+        `Incoming ${isVideo ? 'Video' : 'Voice'} Call`,
+        `${currentUser.name} is calling you...`,
+        { type: 'call', callId, isVideo: String(isVideo) }
+      );
+
       // Listen for answer
-      onSnapshot(callDoc, async (snapshot) => {
+      onSnapshot(callDoc, (snapshot) => {
         const data = snapshot.data();
         if (data?.answer && !pc.current.currentRemoteDescription) {
           const answer = new RTCSessionDescription(JSON.parse(data.answer));
-          await pc.current.setRemoteDescription(answer);
+          pc.current.setRemoteDescription(answer);
         }
-        if (data?.status === 'rejected' || data?.status === 'ended') {
+        if (data?.status === 'ended' || data?.status === 'rejected') {
           endCall();
         }
       });
 
-      // Listen for candidates from the other side
+      // Listen for candidates from the callee
       onSnapshot(collection(db, 'calls', callId, 'calleeCandidates'), (snapshot) => {
         snapshot.docChanges().forEach((change) => {
           if (change.type === 'added') {
@@ -332,7 +512,7 @@ function App() {
             pc.current.addIceCandidate(candidate);
           }
         });
-      });
+      }, (err) => console.error("Callee candidates error:", err));
 
     } catch (err) {
       console.error('Call failed:', err);
@@ -348,6 +528,7 @@ function App() {
       });
       setLocalStream(stream);
       
+      currentCallId.current = callState.callId;
       initPeerConnection(callState.callId, 'calleeCandidates');
       stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
       
@@ -369,7 +550,7 @@ function App() {
             pc.current.addIceCandidate(candidate);
           }
         });
-      });
+      }, (err) => console.error("Caller candidates error:", err));
 
       // Listen for call end
       onSnapshot(callDoc, (snapshot) => {
@@ -377,7 +558,7 @@ function App() {
         if (data?.status === 'ended') {
           endCall();
         }
-      });
+      }, (err) => console.error("Call status listener error:", err));
 
       setCallState(prev => ({ ...prev, incoming: false }));
     } catch (err) {
@@ -387,24 +568,36 @@ function App() {
   };
 
   const rejectCall = async () => {
-    if (callState.callId) {
-      await updateDoc(doc(db, 'calls', callState.callId), { status: 'rejected' });
+    const callId = currentCallId.current;
+    if (callId) {
+      await updateDoc(doc(db, 'calls', callId), { status: 'rejected' });
     }
     endCall();
   };
 
   const endCall = async () => {
     if (pc.current) {
-      pc.current.getSenders().forEach(sender => pc.current.removeTrack(sender));
+      try {
+        pc.current.getSenders().forEach(sender => pc.current.removeTrack(sender));
+      } catch (e) {}
       pc.current.close();
       pc.current = null;
     }
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
     }
-    if (callState.callId) {
-      await updateDoc(doc(db, 'calls', callState.callId), { status: 'ended' });
+    
+    const callId = currentCallId.current;
+    if (callId) {
+      // Clear the ref first to prevent multiple endCall triggers
+      currentCallId.current = null;
+      try {
+        await updateDoc(doc(db, 'calls', callId), { status: 'ended' });
+      } catch (e) {
+        console.error("Error ending call in Firestore:", e);
+      }
     }
+    
     setLocalStream(null);
     setRemoteStream(null);
     setCallState({ active: false, incoming: false, caller: null, isVideo: false, callId: null, offer: null });
@@ -417,14 +610,52 @@ function App() {
   };
 
   const handleLogout = () => {
+    setActiveChat(null);
     signOut(auth);
+  };
+
+  const handleUpdateProfile = async (data) => {
+    if (!currentUser) return;
+    try {
+      const updateData = { ...data };
+      if (data.name) updateData.searchName = data.name.toLowerCase();
+      await updateDoc(doc(db, 'users', currentUser.uid), updateData);
+      setCurrentUser(prev => ({ ...prev, ...updateData }));
+    } catch (e) {
+      console.error("Error updating profile:", e);
+    }
+  };
+
+  const handleCreateGroup = async (groupData) => {
+    if (!currentUser) return;
+    try {
+      const groupRef = await addDoc(collection(db, 'groups'), {
+        ...groupData,
+        members: [...groupData.members, currentUser.uid],
+        createdBy: currentUser.uid,
+        createdAt: serverTimestamp(),
+        lastMessage: null,
+        lastMessageTime: serverTimestamp()
+      });
+      
+      setActiveChat({
+        id: groupRef.id,
+        ...groupData,
+        isGroup: true
+      });
+      setIsCreateGroupOpen(false);
+      setShowChat(true);
+    } catch (e) {
+      console.error("Error creating group:", e);
+      alert("Failed to create group");
+    }
   };
 
   const handleSendMessage = async (content) => {
     if (!currentUser || !activeChat) return;
 
     let chatId = activeChat.id;
-    if (chatId !== 'global') {
+    if (chatId !== 'global' && !activeChat.isGroup) {
       chatId = [currentUser.uid, activeChat.id].sort().join('_');
     }
 
@@ -438,8 +669,19 @@ function App() {
         timestamp: serverTimestamp(),
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         deletedFor: [],
-        deletedForEveryone: false
+        deletedForEveryone: false,
+        read: activeChat.id === 'global' // Global messages are considered read for the sender instantly
       });
+
+      // Notify recipient for private messages
+      if (activeChat.id !== 'global') {
+        sendPushNotification(
+          activeChat.id,
+          `New message from ${currentUser.name}`,
+          content.text || (content.image ? '📷 Sent a photo' : (content.audio ? '🎤 Sent a voice message' : '')),
+          { type: 'chat', chatId }
+        );
+      }
     } catch (e) {
       console.error("Error adding message: ", e);
     }
@@ -467,7 +709,7 @@ function App() {
 
   const handleClearChat = async () => {
     if (!activeChat) return;
-    const chatId = activeChat.id === 'global' ? 'global' : [currentUser.uid, activeChat.id].sort().join('_');
+    const chatId = (activeChat.id === 'global' || activeChat.isGroup) ? activeChat.id : [currentUser.uid, activeChat.id].sort().join('_');
     const chatMsgs = messages[chatId] || [];
     
     try {
@@ -482,7 +724,7 @@ function App() {
     }
   };
 
-  const currentChatId = activeChat?.id === 'global' ? 'global' : (activeChat ? [currentUser.uid, activeChat.id].sort().join('_') : null);
+  const currentChatId = (activeChat?.id === 'global' || activeChat?.isGroup) ? activeChat?.id : (activeChat && currentUser ? [currentUser.uid, activeChat.id].sort().join('_') : null);
   const currentChatMessages = Array.isArray(messages[currentChatId]) 
     ? messages[currentChatId].map(msg => ({
         ...msg,
@@ -490,22 +732,22 @@ function App() {
       }))
     : [];
 
-  if (loading) return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#020617', color: 'white' }}>Loading Nebula...</div>;
-
-  if (!currentUser) {
-    return <Login onLogin={() => {}} />;
-  }
-
   return (
     <div className="app-container">
       <Sidebar 
         activeChat={activeChat} 
         setActiveChat={selectChat} 
-        contacts={contacts} 
+        contacts={filteredContacts} 
         currentUser={currentUser}
         unreadCounts={unreadCounts}
+        callHistory={callHistory}
+        sidebarTab={sidebarTab}
+        setSidebarTab={setSidebarTab}
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onAddUser={() => setIsAddUserOpen(true)}
+        onOpenCreateGroup={() => setIsCreateGroupOpen(true)}
         onLogout={handleLogout}
         className={isMobile && showChat ? 'mobile-hidden' : ''}
       />
@@ -514,7 +756,7 @@ function App() {
         <div style={{ position: 'absolute', top: '-10%', right: '-5%', width: '400px', height: '400px', background: 'rgba(139, 92, 246, 0.1)', borderRadius: '50%', filter: 'blur(100px)', zIndex: 0 }} />
         
       <ChatWindow 
-        activeChat={activeChat ? (contacts.find(c => c.id === activeChat.id) || activeChat) : null} 
+        activeChat={activeChat ? (allContacts.find(c => c.id === activeChat.id) || activeChat) : null} 
         messages={currentChatMessages} 
         onSendMessage={handleSendMessage}
         onDeleteMessage={handleDeleteMessage}
@@ -524,7 +766,16 @@ function App() {
         currentUser={currentUser}
         onBack={() => setShowChat(false)}
         isMobile={isMobile}
+        onAddMemberClick={() => setIsAddMemberOpen(true)}
       />
+
+        <AddMemberModal 
+          isOpen={isAddMemberOpen}
+          onClose={() => setIsAddMemberOpen(false)}
+          group={activeChat}
+          currentUser={currentUser}
+          contacts={users}
+        />
 
         <AnimatePresence>
           {callState.active && (
@@ -545,7 +796,7 @@ function App() {
           isOpen={isSettingsOpen} 
           onClose={() => setIsSettingsOpen(false)} 
           currentUser={currentUser}
-          onUpdateProfile={() => {}} // Disabled for Google Auth for now
+          onUpdateProfile={handleUpdateProfile}
         />
 
         <AddUserModal 
@@ -553,6 +804,14 @@ function App() {
           onClose={() => setIsAddUserOpen(false)}
           currentUser={currentUser}
           myContacts={myContacts}
+        />
+
+        <CreateGroupModal
+          isOpen={isCreateGroupOpen}
+          onClose={() => setIsCreateGroupOpen(false)}
+          currentUser={currentUser}
+          contacts={users}
+          onCreateGroup={handleCreateGroup}
         />
       </main>
     </div>

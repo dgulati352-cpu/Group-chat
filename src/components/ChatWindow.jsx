@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Smile, Paperclip, MoreVertical, Phone, Video, Info, Mic, Square, ChevronLeft } from 'lucide-react';
+import { Send, Smile, Paperclip, MoreVertical, Phone, Video, Info, Mic, Square, ChevronLeft, Search, UserPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onClearChat, onVideoCall, onVoiceCall, currentUser, onBack, isMobile }) => {
+const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onClearChat, onVideoCall, onVoiceCall, currentUser, onBack, isMobile, onAddMemberClick }) => {
   const [inputValue, setInputValue] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -121,12 +123,51 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onCl
           />
           <div>
             <h3 style={{ fontSize: '15px', fontWeight: '600' }}>{activeChat.name}</h3>
-            <p style={{ fontSize: '12px', color: activeChat.online ? 'var(--accent)' : 'var(--text-muted)' }}>
-              {activeChat.online ? 'Active Now' : 'Last seen 2h ago'}
+            <p style={{ fontSize: '12px', color: (activeChat.isGroup || activeChat.online) ? 'var(--accent)' : 'var(--text-muted)' }}>
+              {activeChat.isGroup ? (
+                `${activeChat.members?.length || 0} members`
+              ) : activeChat.online ? (
+                'Online'
+              ) : (
+                'Offline'
+              )}
             </p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <AnimatePresence>
+              {isSearching && (
+                <motion.input
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: isMobile ? '120px' : '200px', opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  type="text"
+                  placeholder="Search messages..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{
+                    background: 'var(--glass)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: '10px',
+                    padding: '8px 12px',
+                    fontSize: '13px',
+                    marginRight: '8px'
+                  }}
+                />
+              )}
+            </AnimatePresence>
+            <button 
+              onClick={() => {
+                setIsSearching(!isSearching);
+                if (isSearching) setSearchQuery('');
+              }}
+              className="glass-hover" 
+              style={{ padding: '10px', borderRadius: '10px', color: isSearching ? 'var(--primary)' : 'var(--text-muted)' }}
+            >
+              <Search size={20} />
+            </button>
+          </div>
           <button 
             onClick={onVoiceCall}
             className="glass-hover" 
@@ -150,12 +191,49 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onCl
               <MoreVertical size={20} />
             </button>
             {showHeaderMenu && (
-              <div className="glass" style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', padding: '8px', borderRadius: '12px', minWidth: '150px', zIndex: 10 }}>
+              <div className="glass" style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', padding: '8px', borderRadius: '12px', minWidth: '170px', zIndex: 10 }}>
+                <button 
+                  onClick={() => {
+                    const chatContent = messages
+                      .filter(msg => !msg.deletedForEveryone && !msg.deletedFor?.includes(currentUser.uid))
+                      .map(msg => {
+                        const sender = msg.userUid === currentUser.uid ? 'Me' : activeChat.name;
+                        const time = msg.time || 'Unknown';
+                        const text = msg.text || (msg.image ? '[Image]' : (msg.audio ? '[Audio]' : ''));
+                        return `[${time}] ${sender}: ${text}`;
+                      })
+                      .join('\n');
+
+                    const blob = new Blob([`Chat with ${activeChat.name}\nGenerated on ${new Date().toLocaleString()}\n\n${chatContent}`], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `chat_${activeChat.name.replace(/\s+/g, '_')}.txt`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    setShowHeaderMenu(false);
+                  }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', textAlign: 'left', color: 'var(--text-main)', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <Paperclip size={14} /> Export History
+                </button>
+                {activeChat.isGroup && (
+                  <button 
+                    onClick={() => { 
+                      onAddMemberClick();
+                      setShowHeaderMenu(false); 
+                    }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', textAlign: 'left', color: 'var(--text-main)', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    <UserPlus size={14} /> Add Member
+                  </button>
+                )}
+                <div style={{ height: '1px', background: 'var(--glass-border)', margin: '4px 0' }} />
                 <button 
                   onClick={() => { onClearChat(); setShowHeaderMenu(false); }}
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', textAlign: 'left', color: '#ef4444', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px' }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', textAlign: 'left', color: '#ef4444', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
                 >
-                  Clear Chat
+                  <Square size={14} /> Clear Chat
                 </button>
               </div>
             )}
@@ -168,6 +246,10 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onCl
         <AnimatePresence initial={false}>
           {Array.isArray(messages) && messages
             .filter(msg => !msg.deletedFor?.includes(currentUser.uid))
+            .filter(msg => {
+              if (!searchQuery) return true;
+              return msg.text?.toLowerCase().includes(searchQuery.toLowerCase());
+            })
             .map((msg, index) => (
             <motion.div
               key={msg.id || index}
@@ -189,11 +271,18 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onCl
                 style={{ 
                   padding: '12px 18px', 
                   borderRadius: msg?.userUid === currentUser.uid ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
-                  background: msg?.userUid === currentUser.uid ? 'var(--primary)' : 'var(--glass)',
-                  color: msg?.userUid === currentUser.uid ? 'white' : 'var(--text-main)',
-                  boxShadow: msg?.userUid === currentUser.uid ? '0 4px 15px rgba(139, 92, 246, 0.2)' : 'none',
-                  border: msg?.userUid === currentUser.uid ? 'none' : '1px solid var(--glass-border)',
-                  cursor: 'pointer'
+                  background: msg?.userUid === currentUser.uid 
+                    ? (msg.read ? 'var(--primary)' : 'rgba(255, 255, 255, 0.05)') 
+                    : 'var(--glass)',
+                  color: msg?.userUid === currentUser.uid 
+                    ? (msg.read ? 'white' : 'var(--text-muted)') 
+                    : 'var(--text-main)',
+                  boxShadow: msg?.userUid === currentUser.uid && msg.read ? '0 4px 15px rgba(59, 130, 246, 0.3)' : 'none',
+                  border: msg?.userUid === currentUser.uid 
+                    ? (msg.read ? 'none' : '1px solid var(--glass-border)') 
+                    : '1px solid var(--glass-border)',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
                 }}
               >
                 {msg?.deletedForEveryone ? (
@@ -214,7 +303,11 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onCl
                 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px', marginTop: '2px' }}>
                   <span style={{ fontSize: '10px', opacity: 0.7 }}>{msg?.time || ''}</span>
-                  {msg?.userUid === currentUser.uid && <span style={{ fontSize: '10px', color: 'var(--accent)' }}>✓✓</span>}
+                  {msg?.userUid === currentUser.uid && (
+                    <span style={{ fontSize: '10px', color: msg.read ? '#60a5fa' : 'rgba(255,255,255,0.3)' }}>
+                      {msg.read ? '✓✓' : '✓'}
+                    </span>
+                  )}
                 </div>
 
                 {/* Message Menu */}
