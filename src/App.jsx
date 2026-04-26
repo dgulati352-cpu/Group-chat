@@ -255,6 +255,33 @@ function App() {
     }
   }, [activeChat, messages, currentUser]);
 
+  // Calculate unread counts
+  useEffect(() => {
+    if (!currentUser || !messages) return;
+
+    const counts = {};
+    Object.keys(messages).forEach(chatId => {
+      const unread = messages[chatId].filter(
+        msg => msg.userUid !== currentUser.uid && (!msg.seenBy || !msg.seenBy.includes(currentUser.uid))
+      ).length;
+
+      if (unread > 0) {
+        if (chatId === 'global') {
+          counts['global'] = unread;
+        } else if (chatId.includes('_')) {
+          // Private chat: extract the other user's UID
+          const [uid1, uid2] = chatId.split('_');
+          const otherUid = uid1 === currentUser.uid ? uid2 : uid1;
+          counts[otherUid] = unread;
+        } else {
+          // Group chat
+          counts[chatId] = unread;
+        }
+      }
+    });
+    setUnreadCounts(counts);
+  }, [messages, currentUser]);
+
   // Presence and User Discovery
   useEffect(() => {
     if (currentUser) {
@@ -404,6 +431,7 @@ function App() {
       avatar: 'https://api.dicebear.com/7.x/identicon/svg?seed=Global', 
       lastMessage: messages['global']?.slice(-1)[0]?.image ? '📷 Photo' : (messages['global']?.slice(-1)[0]?.audio ? '🎤 Voice' : (messages['global']?.slice(-1)[0]?.text || 'Welcome!')), 
       time: messages['global']?.slice(-1)[0]?.time || 'Now', 
+      lastMessageTimestamp: messages['global']?.slice(-1)[0]?.timestamp?.seconds || 0,
       online: true 
     },
     ...users
@@ -428,6 +456,7 @@ function App() {
           avatar: u.avatar,
           lastMessage: lastMsg?.image ? '📷 Photo' : (lastMsg?.audio ? '🎤 Voice' : (lastMsg?.text || 'No messages yet')),
           time: lastMsg?.time || 'Now',
+          lastMessageTimestamp: lastMsg?.timestamp?.seconds || 0,
           online: statusInfo?.state === 'online',
           lastSeen: statusInfo?.last_changed || u.lastSeen
         };
@@ -438,9 +467,10 @@ function App() {
         ...g,
         lastMessage: lastMsg?.image ? '📷 Photo' : (lastMsg?.audio ? '🎤 Voice' : (lastMsg?.text || 'No messages yet')),
         time: lastMsg?.time || 'Now',
+        lastMessageTimestamp: lastMsg?.timestamp?.seconds || 0,
       };
     })
-  ];
+  ].sort((a, b) => (b.lastMessageTimestamp || 0) - (a.lastMessageTimestamp || 0));
 
   const filteredContacts = allContacts.filter(c => 
     (c.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
