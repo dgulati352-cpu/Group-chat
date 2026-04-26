@@ -9,7 +9,7 @@ app.use(cors());
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "http://localhost:5174"],
+    origin: "*", // Allow all for now, or specify production URLs
     methods: ["GET", "POST"]
   }
 });
@@ -29,7 +29,8 @@ io.on('connection', (socket) => {
     socket.to(data.to).emit('call-made', {
       offer: data.offer,
       socket: socket.id,
-      user: data.user
+      user: data.user,
+      isVideo: data.isVideo
     });
   });
 
