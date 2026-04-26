@@ -4,9 +4,8 @@ import ChatWindow from './components/ChatWindow';
 import Login from './components/Login';
 import CallModal from './components/CallModal';
 import SettingsModal from './components/SettingsModal';
-import { io } from 'socket.io-client';
 import { AnimatePresence } from 'framer-motion';
-import { db, auth } from './firebase';
+import { auth, db, googleProvider, rtdb } from './firebase';
 import { 
   collection, 
   addDoc, 
@@ -14,12 +13,20 @@ import {
   where, 
   orderBy, 
   onSnapshot, 
-  serverTimestamp 
+  serverTimestamp,
+  doc,
+  setDoc,
+  deleteDoc,
+  updateDoc
 } from 'firebase/firestore';
+import { 
+  ref, 
+  onValue, 
+  set, 
+  onDisconnect, 
+  serverTimestamp as rtdbTimestamp 
+} from 'firebase/database';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
-const socket = io(SOCKET_URL, { autoConnect: false });
 
 const iceServers = {
   iceServers: [
@@ -111,73 +118,65 @@ function App() {
 
   const [onlineUsers, setOnlineUsers] = useState([]);
 
-  // Socket for presence and signaling
+  // Presence and User Discovery
   useEffect(() => {
     if (currentUser) {
-      // Register listeners BEFORE connecting
-      socket.on('connect', () => {
-        console.log('Connected to socket server');
-        socket.emit('join', {
-          uid: currentUser.uid,
-          name: currentUser.name,
-          avatar: currentUser.avatar,
-          email: currentUser.email,
-          joinedAt: new Date().toISOString()
-        });
-      });
+      // 1. RTDB Presence Logic
+      const statusRef = ref(rtdb, `/status/${currentUser.uid}`);
+      const connectedRef = ref(rtdb, '.info/connected');
 
-      socket.on('users', (online) => {
-        console.log('Online users updated:', online);
-        setOnlineUsers(online);
-      });
-      
-      socket.on('call-made', async (data) => {
-        setCallState({
-          active: true,
-          incoming: true,
-          caller: data.user,
-          isVideo: data.isVideo,
-          socketId: data.socket,
-          offer: data.offer
-        });
-      });
-
-      socket.on('answer-made', async (data) => {
-        if (pc.current) {
-          await pc.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+      onValue(connectedRef, (snapshot) => {
+        if (snapshot.val() === true) {
+          onDisconnect(statusRef).set({
+            state: 'offline',
+            last_changed: rtdbTimestamp()
+          }).then(() => {
+            set(statusRef, {
+              state: 'online',
+              last_changed: rtdbTimestamp()
+            });
+          });
         }
       });
 
-      socket.on('ice-candidate', async (data) => {
-        if (pc.current) {
-          await pc.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-        }
+      // 2. Listen to ALL users' presence
+      const allStatusRef = ref(rtdb, '/status');
+      onValue(allStatusRef, (snapshot) => {
+        const statuses = snapshot.val() || {};
+        const onlineList = Object.entries(statuses)
+          .filter(([uid, data]) => data.state === 'online')
+          .map(([uid, data]) => ({ uid, ...data }));
+        setOnlineUsers(onlineList);
       });
 
-      socket.on('call-rejected', () => {
-        endCall();
-        alert('Call rejected by user');
-      });
+      // 3. Firestore Call Signaling Listener
+      const callsQuery = query(
+        collection(db, 'calls'),
+        where('to', '==', currentUser.uid),
+        where('status', '==', 'pending')
+      );
 
-      socket.on('call-ended', () => {
-        endCall();
-      });
-
-      // Connect if not already connected
-      if (!socket.connected) {
-        socket.connect();
-      } else {
-        // If already connected, just emit join
-        socket.emit('join', {
-          uid: currentUser.uid,
-          name: currentUser.name,
-          avatar: currentUser.avatar,
-          email: currentUser.email,
-          joinedAt: new Date().toISOString()
+      const unsubscribeCalls = onSnapshot(callsQuery, (snapshot) => {
+        snapshot.docChanges().forEach(async (change) => {
+          const data = change.doc.data();
+          if (change.type === 'added') {
+            setCallState({
+              active: true,
+              incoming: true,
+              caller: data.fromUser,
+              isVideo: data.isVideo,
+              callId: change.doc.id,
+              offer: JSON.parse(data.offer)
+            });
+          } else if (change.type === 'modified' || change.type === 'removed') {
+            if (data.status === 'ended' || data.status === 'rejected' || change.type === 'removed') {
+              setCallState({ active: false, incoming: false, caller: null, isVideo: false, callId: null, offer: null });
+            }
+          }
         });
-      }
+      });
 
-      // Also fetch all users from Firestore for discovery
+      // 4. Firestore Discovery (Users List)
       const q = query(collection(db, 'users'));
       const unsubscribeUsers = onSnapshot(q, (snapshot) => {
         const allUsers = snapshot.docs.map(doc => doc.data());
@@ -185,14 +184,7 @@ function App() {
       });
 
       return () => {
-        socket.off('connect');
-        socket.off('users');
-        socket.off('call-made');
-        socket.off('answer-made');
-        socket.off('ice-candidate');
-        socket.off('call-rejected');
-        socket.off('call-ended');
-        socket.disconnect();
+        unsubscribeCalls();
         unsubscribeUsers();
       };
     }
@@ -203,22 +195,24 @@ function App() {
     active: false,
     incoming: false,
     caller: null,
-    isVideo: false
+    isVideo: false,
+    callId: null,
+    offer: null
   });
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const pc = useRef(null);
 
-  const initPeerConnection = (targetSocketId) => {
+  const initPeerConnection = (callId, type) => {
     pc.current = new RTCPeerConnection(iceServers);
+    
     pc.current.onicecandidate = (event) => {
       if (event.candidate) {
-        socket.emit('ice-candidate', {
-          candidate: event.candidate,
-          to: targetSocketId
-        });
+        const candidatesCol = collection(db, 'calls', callId, type);
+        addDoc(candidatesCol, event.candidate.toJSON());
       }
     };
+
     pc.current.ontrack = (event) => {
       setRemoteStream(event.streams[0]);
     };
@@ -239,8 +233,7 @@ function App() {
       const onlineInfo = onlineUsers.find(ou => ou.uid === u.uid);
       
       return {
-        id: u.uid, // Use UID as stable ID
-        socketId: onlineInfo?.id, // Dynamic socket ID
+        id: u.uid,
         uid: u.uid,
         name: u.name,
         avatar: u.avatar,
@@ -260,33 +253,60 @@ function App() {
       });
       setLocalStream(stream);
       
-      // Find current socket ID from onlineUsers
-      const targetOnline = onlineUsers.find(ou => ou.uid === activeChat.id);
-      if (!targetOnline) {
-        alert('User is not online to receive calls');
-        return;
-      }
+      const targetUser = users.find(u => u.uid === activeChat.id);
+      if (!targetUser) return;
 
-      initPeerConnection(targetOnline.id);
+      const callDoc = doc(collection(db, 'calls'));
+      const callId = callDoc.id;
+
+      initPeerConnection(callId, 'callerCandidates');
       stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
       
       const offer = await pc.current.createOffer();
       await pc.current.setLocalDescription(offer);
       
+      const callData = {
+        from: currentUser.uid,
+        fromUser: currentUser,
+        to: targetUser.uid,
+        status: 'pending',
+        offer: JSON.stringify(offer),
+        isVideo,
+        createdAt: serverTimestamp()
+      };
+
+      await setDoc(callDoc, callData);
+
       setCallState({ 
         active: true, 
         incoming: false, 
-        caller: targetOnline, 
+        caller: targetUser, 
         isVideo, 
-        socketId: targetOnline.id 
+        callId
       });
 
-      socket.emit('call-user', { 
-        offer, 
-        to: targetOnline.id, 
-        user: currentUser,
-        isVideo 
+      // Listen for answer
+      onSnapshot(callDoc, async (snapshot) => {
+        const data = snapshot.data();
+        if (data?.answer && !pc.current.currentRemoteDescription) {
+          const answer = new RTCSessionDescription(JSON.parse(data.answer));
+          await pc.current.setRemoteDescription(answer);
+        }
+        if (data?.status === 'rejected' || data?.status === 'ended') {
+          endCall();
+        }
       });
+
+      // Listen for candidates from the other side
+      onSnapshot(collection(db, 'calls', callId, 'calleeCandidates'), (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const candidate = new RTCIceCandidate(change.doc.data());
+            pc.current.addIceCandidate(candidate);
+          }
+        });
+      });
+
     } catch (err) {
       console.error('Call failed:', err);
       alert('Could not access camera/microphone');
@@ -300,12 +320,38 @@ function App() {
         audio: true 
       });
       setLocalStream(stream);
-      initPeerConnection(callState.socketId);
+      
+      initPeerConnection(callState.callId, 'calleeCandidates');
       stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
+      
       await pc.current.setRemoteDescription(new RTCSessionDescription(callState.offer));
       const answer = await pc.current.createAnswer();
       await pc.current.setLocalDescription(answer);
-      socket.emit('make-answer', { answer, to: callState.socketId });
+
+      const callDoc = doc(db, 'calls', callState.callId);
+      await updateDoc(callDoc, {
+        answer: JSON.stringify(answer),
+        status: 'accepted'
+      });
+
+      // Listen for candidates from the caller
+      onSnapshot(collection(db, 'calls', callState.callId, 'callerCandidates'), (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const candidate = new RTCIceCandidate(change.doc.data());
+            pc.current.addIceCandidate(candidate);
+          }
+        });
+      });
+
+      // Listen for call end
+      onSnapshot(callDoc, (snapshot) => {
+        const data = snapshot.data();
+        if (data?.status === 'ended') {
+          endCall();
+        }
+      });
+
       setCallState(prev => ({ ...prev, incoming: false }));
     } catch (err) {
       console.error('Accept call failed:', err);
@@ -313,12 +359,14 @@ function App() {
     }
   };
 
-  const rejectCall = () => {
-    socket.emit('reject-call', { from: callState.socketId });
+  const rejectCall = async () => {
+    if (callState.callId) {
+      await updateDoc(doc(db, 'calls', callState.callId), { status: 'rejected' });
+    }
     endCall();
   };
 
-  const endCall = () => {
+  const endCall = async () => {
     if (pc.current) {
       pc.current.getSenders().forEach(sender => pc.current.removeTrack(sender));
       pc.current.close();
@@ -327,12 +375,12 @@ function App() {
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
     }
-    if (callState.socketId) {
-      socket.emit('end-call', { to: callState.socketId });
+    if (callState.callId) {
+      await updateDoc(doc(db, 'calls', callState.callId), { status: 'ended' });
     }
     setLocalStream(null);
     setRemoteStream(null);
-    setCallState({ active: false, incoming: false, caller: null, isVideo: false, socketId: null });
+    setCallState({ active: false, incoming: false, caller: null, isVideo: false, callId: null, offer: null });
   };
 
   const selectChat = (chat) => {
