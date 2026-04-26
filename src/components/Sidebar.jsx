@@ -2,9 +2,9 @@ import React from 'react';
 import { Search, MessageSquare, Users, Settings, LogOut, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const Sidebar = ({ activeChat, setActiveChat, contacts, currentUser, unreadCounts, onOpenSettings, onAddUser, onLogout }) => {
+const Sidebar = ({ activeChat, setActiveChat, contacts, currentUser, unreadCounts, onOpenSettings, onAddUser, onLogout, className }) => {
   return (
-    <div className="sidebar glass" style={{ width: 'var(--sidebar-width)', height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className={`sidebar glass ${className}`} style={{ width: 'var(--sidebar-width)', flexShrink: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Sidebar Header */}
       <div style={{ padding: '24px', borderBottom: '1px solid var(--glass-border)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>

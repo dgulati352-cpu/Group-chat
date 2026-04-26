@@ -46,6 +46,14 @@ function App() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [myContacts, setMyContacts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showChat, setShowChat] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Auth Listener
   useEffect(() => {
@@ -405,6 +413,7 @@ function App() {
   const selectChat = (chat) => {
     setActiveChat(chat);
     setUnreadCounts(prev => ({ ...prev, [chat.id]: 0 }));
+    if (isMobile) setShowChat(true);
   };
 
   const handleLogout = () => {
@@ -427,10 +436,49 @@ function App() {
         userUid: currentUser.uid,
         ...content,
         timestamp: serverTimestamp(),
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        deletedFor: [],
+        deletedForEveryone: false
       });
     } catch (e) {
       console.error("Error adding message: ", e);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId, type) => {
+    try {
+      const msgRef = doc(db, 'messages', messageId);
+      if (type === 'me') {
+        // Soft delete for current user
+        await updateDoc(msgRef, {
+          deletedFor: [...(messages[currentChatId].find(m => m.id === messageId)?.deletedFor || []), currentUser.uid]
+        });
+      } else if (type === 'everyone') {
+        // Delete for everyone (soft delete for UI, or hard delete)
+        // Hard delete is simpler, but let's do soft delete to show "Message was deleted"
+        await updateDoc(msgRef, {
+          deletedForEveryone: true
+        });
+      }
+    } catch (e) {
+      console.error("Error deleting message: ", e);
+    }
+  };
+
+  const handleClearChat = async () => {
+    if (!activeChat) return;
+    const chatId = activeChat.id === 'global' ? 'global' : [currentUser.uid, activeChat.id].sort().join('_');
+    const chatMsgs = messages[chatId] || [];
+    
+    try {
+      const promises = chatMsgs.map(msg => {
+        const msgRef = doc(db, 'messages', msg.id);
+        const newDeletedFor = Array.from(new Set([...(msg.deletedFor || []), currentUser.uid]));
+        return updateDoc(msgRef, { deletedFor: newDeletedFor });
+      });
+      await Promise.all(promises);
+    } catch (e) {
+      console.error("Error clearing chat: ", e);
     }
   };
 
@@ -459,18 +507,24 @@ function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         onAddUser={() => setIsAddUserOpen(true)}
         onLogout={handleLogout}
+        className={isMobile && showChat ? 'mobile-hidden' : ''}
       />
       
-      <main style={{ flex: 1, position: 'relative' }}>
+      <main style={{ flex: 1, position: 'relative' }} className={isMobile && !showChat ? 'mobile-hidden' : ''}>
         <div style={{ position: 'absolute', top: '-10%', right: '-5%', width: '400px', height: '400px', background: 'rgba(139, 92, 246, 0.1)', borderRadius: '50%', filter: 'blur(100px)', zIndex: 0 }} />
         
-        <ChatWindow 
+      <ChatWindow 
         activeChat={activeChat ? (contacts.find(c => c.id === activeChat.id) || activeChat) : null} 
         messages={currentChatMessages} 
-          onSendMessage={handleSendMessage}
-          onVideoCall={() => startCall(true)}
-          onVoiceCall={() => startCall(false)}
-        />
+        onSendMessage={handleSendMessage}
+        onDeleteMessage={handleDeleteMessage}
+        onClearChat={handleClearChat}
+        onVideoCall={() => startCall(true)}
+        onVoiceCall={() => startCall(false)}
+        currentUser={currentUser}
+        onBack={() => setShowChat(false)}
+        isMobile={isMobile}
+      />
 
         <AnimatePresence>
           {callState.active && (

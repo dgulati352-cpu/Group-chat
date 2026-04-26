@@ -120,3 +120,37 @@ input:focus {
   background: rgba(255, 255, 255, 0.05);
   outline: none;
 }
+
+/* Responsive Layout */
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width: 100%;
+  }
+
+  .mobile-hidden {
+    display: none !important;
+  }
+
+  .mobile-full {
+    width: 100% !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    z-index: 50;
+  }
+
+  .app-container {
+    flex-direction: column;
+  }
+}
+
+.message-bubble {
+  max-width: 85% !important;
+}
+
+@media (min-width: 769px) {
+  .desktop-hidden {
+    display: none !important;
+  }
+}
