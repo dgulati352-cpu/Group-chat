@@ -57,11 +57,8 @@ function App() {
         }
 
         setCurrentUser(userData);
-        socket.connect();
-        socket.emit('join', userData);
       } else {
         setCurrentUser(null);
-        socket.disconnect();
       }
       setLoading(false);
     });
@@ -116,17 +113,23 @@ function App() {
   // Socket for presence and signaling
   useEffect(() => {
     if (currentUser) {
+      // Register listeners BEFORE connecting
+      socket.on('connect', () => {
+        console.log('Connected to socket server');
+        socket.emit('join', {
+          uid: currentUser.uid,
+          name: currentUser.name,
+          avatar: currentUser.avatar,
+          email: currentUser.email,
+          joinedAt: new Date().toISOString()
+        });
+      });
+
       socket.on('users', (online) => {
+        console.log('Online users updated:', online);
         setOnlineUsers(online);
       });
       
-      // Also fetch all users from Firestore for discovery
-      const q = query(collection(db, 'users'));
-      const unsubscribeUsers = onSnapshot(q, (snapshot) => {
-        const allUsers = snapshot.docs.map(doc => doc.data());
-        setUsers(allUsers.filter(u => u.uid !== currentUser.uid));
-      });
-
       socket.on('call-made', async (data) => {
         setCallState({
           active: true,
@@ -159,13 +162,37 @@ function App() {
         endCall();
       });
 
+      // Connect if not already connected
+      if (!socket.connected) {
+        socket.connect();
+      } else {
+        // If already connected, just emit join
+        socket.emit('join', {
+          uid: currentUser.uid,
+          name: currentUser.name,
+          avatar: currentUser.avatar,
+          email: currentUser.email,
+          joinedAt: new Date().toISOString()
+        });
+      }
+
+      // Also fetch all users from Firestore for discovery
+      const q = query(collection(db, 'users'));
+      const unsubscribeUsers = onSnapshot(q, (snapshot) => {
+        const allUsers = snapshot.docs.map(doc => doc.data());
+        setUsers(allUsers.filter(u => u.uid !== currentUser.uid));
+      });
+
       return () => {
+        socket.off('connect');
         socket.off('users');
         socket.off('call-made');
         socket.off('answer-made');
         socket.off('ice-candidate');
         socket.off('call-rejected');
         socket.off('call-ended');
+        socket.disconnect();
+        unsubscribeUsers();
       };
     }
   }, [currentUser]);
@@ -369,8 +396,8 @@ function App() {
         <div style={{ position: 'absolute', top: '-10%', right: '-5%', width: '400px', height: '400px', background: 'rgba(139, 92, 246, 0.1)', borderRadius: '50%', filter: 'blur(100px)', zIndex: 0 }} />
         
         <ChatWindow 
-          activeChat={activeChat} 
-          messages={currentChatMessages} 
+        activeChat={activeChat ? (contacts.find(c => c.id === activeChat.id) || activeChat) : null} 
+        messages={currentChatMessages} 
           onSendMessage={handleSendMessage}
           onVideoCall={() => startCall(true)}
           onVoiceCall={() => startCall(false)}
