@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Smile, Paperclip, MoreVertical, Phone, Video, Info, Mic, Square, ChevronLeft, Search, UserPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onClearChat, onVideoCall, onVoiceCall, currentUser, onBack, isMobile, onAddMemberClick, onOpenGroupInfo, allUsers = [] }) => {
+const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onClearChat, onVideoCall, onVoiceCall, currentUser, onBack, isMobile, onAddMemberClick, onOpenGroupInfo, allUsers = [], isAdmin }) => {
   const [inputValue, setInputValue] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -236,15 +236,17 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onCl
                     >
                       <Info size={14} /> Group Info
                     </button>
-                    <button 
-                      onClick={() => { 
-                        onAddMemberClick();
-                        setShowHeaderMenu(false); 
-                      }}
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', textAlign: 'left', color: 'var(--text-main)', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
-                    >
-                      <UserPlus size={14} /> Add Member
-                    </button>
+                    {isAdmin && (
+                      <button 
+                        onClick={() => { 
+                          onAddMemberClick();
+                          setShowHeaderMenu(false); 
+                        }}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', textAlign: 'left', color: 'var(--text-main)', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                      >
+                        <UserPlus size={14} /> Add Member
+                      </button>
+                    )}
                   </>
                 )}
                 <div style={{ height: '1px', background: 'var(--glass-border)', margin: '4px 0' }} />

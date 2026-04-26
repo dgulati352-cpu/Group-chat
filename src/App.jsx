@@ -809,6 +809,7 @@ function App() {
         onAddMemberClick={() => setIsAddMemberOpen(true)}
         onOpenGroupInfo={() => setIsGroupInfoOpen(true)}
         allUsers={users}
+        isAdmin={activeChat?.isGroup && (activeChat.admins?.includes(currentUser?.uid) || activeChat.createdBy === currentUser?.uid)}
       />
 
         <AddMemberModal 
