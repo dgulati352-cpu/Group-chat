@@ -38,14 +38,24 @@ function App() {
 
   // Auth Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const userData = {
           uid: user.uid,
           name: user.displayName,
           avatar: user.photoURL,
-          email: user.email
+          email: user.email,
+          lastSeen: serverTimestamp()
         };
+        
+        // Save user to Firestore
+        try {
+          const { setDoc, doc } = await import('firebase/firestore');
+          await setDoc(doc(db, 'users', user.uid), userData, { merge: true });
+        } catch (e) {
+          console.error("Error saving user:", e);
+        }
+
         setCurrentUser(userData);
         socket.connect();
         socket.emit('join', userData);
@@ -101,11 +111,20 @@ function App() {
     return () => unsubscribe();
   }, [currentUser]);
 
+  const [onlineUsers, setOnlineUsers] = useState([]);
+
   // Socket for presence and signaling
   useEffect(() => {
     if (currentUser) {
-      socket.on('users', (onlineUsers) => {
-        setUsers(onlineUsers.filter(u => u.uid !== currentUser.uid));
+      socket.on('users', (online) => {
+        setOnlineUsers(online);
+      });
+      
+      // Also fetch all users from Firestore for discovery
+      const q = query(collection(db, 'users'));
+      const unsubscribeUsers = onSnapshot(q, (snapshot) => {
+        const allUsers = snapshot.docs.map(doc => doc.data());
+        setUsers(allUsers.filter(u => u.uid !== currentUser.uid));
       });
 
       socket.on('call-made', async (data) => {
@@ -189,15 +208,17 @@ function App() {
     ...users.map(u => {
       const pChatId = [currentUser.uid, u.uid].sort().join('_');
       const lastMsg = messages[pChatId]?.slice(-1)[0];
+      const onlineInfo = onlineUsers.find(ou => ou.uid === u.uid);
+      
       return {
-        id: u.uid, // Use UID as the stable ID for activeChat
-        socketId: u.id, // Store current socket ID
+        id: u.uid, // Use UID as stable ID
+        socketId: onlineInfo?.id, // Dynamic socket ID
         uid: u.uid,
         name: u.name,
         avatar: u.avatar,
         lastMessage: lastMsg?.image ? '📷 Photo' : (lastMsg?.audio ? '🎤 Voice' : (lastMsg?.text || 'No messages yet')),
         time: lastMsg?.time || 'Now',
-        online: true
+        online: !!onlineInfo
       };
     })
   ];
@@ -211,13 +232,14 @@ function App() {
       });
       setLocalStream(stream);
       
-      const targetUser = users.find(u => u.uid === activeChat.id);
-      if (!targetUser) {
-        alert('User is no longer online');
+      // Find current socket ID from onlineUsers
+      const targetOnline = onlineUsers.find(ou => ou.uid === activeChat.id);
+      if (!targetOnline) {
+        alert('User is not online to receive calls');
         return;
       }
 
-      initPeerConnection(targetUser.id);
+      initPeerConnection(targetOnline.id);
       stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
       
       const offer = await pc.current.createOffer();
@@ -226,14 +248,14 @@ function App() {
       setCallState({ 
         active: true, 
         incoming: false, 
-        caller: targetUser, 
+        caller: targetOnline, 
         isVideo, 
-        socketId: targetUser.id 
+        socketId: targetOnline.id 
       });
 
       socket.emit('call-user', { 
         offer, 
-        to: targetUser.id, 
+        to: targetOnline.id, 
         user: currentUser,
         isVideo 
       });
