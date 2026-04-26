@@ -7,6 +7,7 @@ import SettingsModal from './components/SettingsModal';
 import AddUserModal from './components/AddUserModal';
 import CreateGroupModal from './components/CreateGroupModal';
 import AddMemberModal from './components/AddMemberModal';
+import GroupInfoModal from './components/GroupInfoModal';
 import { AnimatePresence } from 'framer-motion';
 import { auth, db, googleProvider, rtdb, messaging } from './firebase';
 import { getToken, onMessage } from 'firebase/messaging';
@@ -55,6 +56,7 @@ function App() {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+  const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
   const [myGroups, setMyGroups] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -668,6 +670,7 @@ function App() {
       const groupRef = await addDoc(collection(db, 'groups'), {
         ...groupData,
         members: [...groupData.members, currentUser.uid],
+        admins: [currentUser.uid],
         createdBy: currentUser.uid,
         createdAt: serverTimestamp(),
         lastMessage: null,
@@ -804,6 +807,7 @@ function App() {
         onBack={() => setShowChat(false)}
         isMobile={isMobile}
         onAddMemberClick={() => setIsAddMemberOpen(true)}
+        onOpenGroupInfo={() => setIsGroupInfoOpen(true)}
         allUsers={users}
       />
 
@@ -813,6 +817,18 @@ function App() {
           group={activeChat}
           currentUser={currentUser}
           contacts={users}
+        />
+
+        <GroupInfoModal 
+          isOpen={isGroupInfoOpen}
+          onClose={() => setIsGroupInfoOpen(false)}
+          group={activeChat}
+          currentUser={currentUser}
+          allUsers={users}
+          onAddMemberClick={() => {
+            setIsGroupInfoOpen(false);
+            setIsAddMemberOpen(true);
+          }}
         />
 
         <AnimatePresence>

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Smile, Paperclip, MoreVertical, Phone, Video, Info, Mic, Square, ChevronLeft, Search, UserPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onClearChat, onVideoCall, onVoiceCall, currentUser, onBack, isMobile, onAddMemberClick, allUsers = [] }) => {
+const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onClearChat, onVideoCall, onVoiceCall, currentUser, onBack, isMobile, onAddMemberClick, onOpenGroupInfo, allUsers = [] }) => {
   const [inputValue, setInputValue] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -111,9 +111,16 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onCl
     }}>
       {/* Chat Header */}
       <div className="glass" style={{ padding: '12px var(--side-padding, 16px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', zIndex: 5 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div 
+          style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: activeChat.isGroup ? 'pointer' : 'default' }}
+          onClick={() => activeChat.isGroup && onOpenGroupInfo()}
+        >
           {isMobile && (
-            <button onClick={onBack} className="glass-hover" style={{ padding: '8px', borderRadius: '10px', color: 'var(--text-muted)', marginRight: '-4px' }}>
+            <button 
+              onClick={(e) => { e.stopPropagation(); onBack(); }} 
+              className="glass-hover" 
+              style={{ padding: '8px', borderRadius: '10px', color: 'var(--text-muted)', marginRight: '-4px' }}
+            >
               <ChevronLeft size={24} />
             </button>
           )}
@@ -219,15 +226,26 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, onDeleteMessage, onCl
                   <Paperclip size={14} /> Export History
                 </button>
                 {activeChat.isGroup && (
-                  <button 
-                    onClick={() => { 
-                      onAddMemberClick();
-                      setShowHeaderMenu(false); 
-                    }}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', textAlign: 'left', color: 'var(--text-main)', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
-                  >
-                    <UserPlus size={14} /> Add Member
-                  </button>
+                  <>
+                    <button 
+                      onClick={() => { 
+                        onOpenGroupInfo();
+                        setShowHeaderMenu(false); 
+                      }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', textAlign: 'left', color: 'var(--text-main)', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                      <Info size={14} /> Group Info
+                    </button>
+                    <button 
+                      onClick={() => { 
+                        onAddMemberClick();
+                        setShowHeaderMenu(false); 
+                      }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', textAlign: 'left', color: 'var(--text-main)', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                      <UserPlus size={14} /> Add Member
+                    </button>
+                  </>
                 )}
                 <div style={{ height: '1px', background: 'var(--glass-border)', margin: '4px 0' }} />
                 <button 
