@@ -45,7 +45,7 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
   };
 
   const toggleContact = async (user) => {
-    const isContact = myContacts.includes(user.uid);
+    const isContact = myContacts.some(c => c.uid === user.uid);
     const contactRef = doc(db, 'users', currentUser.uid, 'contacts', user.uid);
     
     try {
@@ -241,7 +241,7 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
                             width: '38px',
                             height: '38px',
                             borderRadius: '12px', 
-                            background: myContacts.includes(user.uid) ? 'var(--accent)' : 'var(--primary)',
+                            background: myContacts.some(c => c.uid === user.uid) ? 'var(--accent)' : 'var(--primary)',
                             color: 'white',
                             border: 'none',
                             cursor: 'pointer',
@@ -251,7 +251,7 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
                             boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
                           }}
                         >
-                          {myContacts.includes(user.uid) ? <Check size={20} strokeWidth={3} /> : <UserPlus size={20} strokeWidth={2.5} />}
+                          {myContacts.some(c => c.uid === user.uid) ? <Check size={20} strokeWidth={3} /> : <UserPlus size={20} strokeWidth={2.5} />}
                         </motion.button>
                       </motion.div>
                     ))}

@@ -269,4 +269,3 @@ const Sidebar = ({
 };
 
 export default Sidebar;
-r;
