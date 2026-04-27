@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { auth, db } from './firebase'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { doc, getDoc, setDoc, serverTimestamp, updateDoc, collection, onSnapshot, query, orderBy } from 'firebase/firestore'
+import { doc, getDoc, setDoc, serverTimestamp, updateDoc, collection, onSnapshot, query, orderBy, where } from 'firebase/firestore'
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
 import ChatWindow from './components/ChatWindow'
@@ -18,6 +18,7 @@ export default function App() {
   const [sidebarTab, setSidebarTab] = useState('chats');
   const [searchTerm, setSearchTerm] = useState('');
 
+  const [chats, setChats] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [messages, setMessages] = useState([]);
   const [callHistory, setCallHistory] = useState([]);
@@ -28,10 +29,10 @@ export default function App() {
 
   useEffect(() => {
     let unsubContacts = null;
+    let unsubChats = null;
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // ... previous logic ...
         const userRef = doc(db, 'users', user.uid);
         const userSnap = await getDoc(userRef);
         
@@ -55,8 +56,22 @@ export default function App() {
         
         setCurrentUser(userData);
 
-        if (unsubContacts) unsubContacts();
+        // Listen for chats where the user is a participant
+        const chatsRef = collection(db, 'chats');
+        const qChats = query(chatsRef, where('participants', 'array-contains', user.uid), orderBy('lastMessageTime', 'desc'));
+        
+        if (unsubChats) unsubChats();
+        unsubChats = onSnapshot(qChats, (snap) => {
+          console.log(`Received ${snap.docs.length} chats for user ${user.uid}`);
+          const chatsList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setChats(chatsList);
+        }, (err) => {
+          console.error("Error listening to chats:", err);
+        });
+
+        // Listen for contacts
         const contactsRef = collection(db, 'users', user.uid, 'contacts');
+        if (unsubContacts) unsubContacts();
         unsubContacts = onSnapshot(contactsRef, (snap) => {
           console.log(`Received ${snap.docs.length} contacts for user ${user.uid}`);
           const contactsList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -65,10 +80,7 @@ export default function App() {
       } else {
         setCurrentUser(null);
         setContacts([]);
-        if (unsubContacts) {
-          unsubContacts();
-          unsubContacts = null;
-        }
+        setChats([]);
       }
       setLoading(false);
     });
@@ -76,6 +88,7 @@ export default function App() {
     return () => {
       unsubscribe();
       if (unsubContacts) unsubContacts();
+      if (unsubChats) unsubChats();
     };
   }, []);
 
