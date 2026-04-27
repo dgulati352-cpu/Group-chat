@@ -51,6 +51,28 @@ const Sidebar = ({
     show: { opacity: 1, x: 0 }
   };
 
+  const filteredChats = chats.filter(chat => {
+    if (!searchTerm) return true;
+    const otherId = chat.participants?.find(uid => uid !== currentUser.uid);
+    const contact = contacts.find(c => c.id === otherId);
+    const name = contact ? contact.name : (chat.isGroup ? chat.name : 'Unknown User');
+    return name.toLowerCase().includes(searchTerm.toLowerCase());
+  });
+
+  const filteredContacts = contacts.filter(contact => {
+    if (!searchTerm) return true;
+    return (contact.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+           (contact.email || '').toLowerCase().includes(searchTerm.toLowerCase());
+  });
+
+  const filteredCalls = callHistory.filter(call => {
+    if (!searchTerm) return true;
+    const isOutgoing = call.from === currentUser.uid;
+    const otherUserUid = isOutgoing ? call.to : call.from;
+    const name = getParticipantName(otherUserUid);
+    return name.toLowerCase().includes(searchTerm.toLowerCase());
+  });
+
   return (
     <div className={`sidebar glass-panel ${className}`} style={{ display: 'flex', flexDirection: 'column', height: '100%', zIndex: 10 }}>
       {/* Sidebar Header */}
@@ -94,7 +116,7 @@ const Sidebar = ({
           <Search size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
           <input 
             type="text" 
-            placeholder="Search conversations..." 
+            placeholder="Search Nebula..." 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{ width: '100%', paddingLeft: '48px', height: '52px' }}
@@ -138,73 +160,129 @@ const Sidebar = ({
               exit={{ opacity: 0 }}
               style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
             >
-              {chats.map((chat) => {
-                const otherId = chat.participants?.find(uid => uid !== currentUser.uid);
-                const contact = contacts.find(c => c.id === otherId);
-                const name = contact ? contact.name : (chat.isGroup ? chat.name : 'Unknown User');
-                const avatar = contact ? contact.avatar : (chat.isGroup ? chat.avatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${otherId}`);
-                const isOnline = contact?.online;
-                const lastMessage = chat.lastMessage || 'No messages yet';
-                const time = formatTime(chat.lastMessageTime);
+              {filteredChats.length > 0 ? (
+                filteredChats.map((chat) => {
+                  const otherId = chat.participants?.find(uid => uid !== currentUser.uid);
+                  const contact = contacts.find(c => c.id === otherId);
+                  const name = contact ? contact.name : (chat.isGroup ? chat.name : 'Unknown User');
+                  const avatar = contact ? contact.avatar : (chat.isGroup ? chat.avatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${otherId}`);
+                  const isOnline = contact?.online;
+                  const lastMessage = chat.lastMessage || 'No messages yet';
+                  const time = formatTime(chat.lastMessageTime);
 
-                return (
-                  <motion.div
-                    key={chat.id}
-                    variants={itemVariants}
-                    whileHover={{ x: 4 }}
-                    onClick={() => setActiveChat({ ...chat, uid: otherId, name, avatar })}
-                    className="glass-card"
-                    style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '16px', 
-                      padding: '12px 16px', 
-                      cursor: 'pointer',
-                      background: activeChat?.id === chat.id ? 'var(--glass-hover)' : '',
-                      borderColor: activeChat?.id === chat.id ? 'var(--primary)' : ''
-                    }}
+                  return (
+                    <motion.div
+                      key={chat.id}
+                      variants={itemVariants}
+                      whileHover={{ x: 4 }}
+                      onClick={() => setActiveChat({ ...chat, uid: otherId, name, avatar })}
+                      className="glass-card"
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '16px', 
+                        padding: '12px 16px', 
+                        cursor: 'pointer',
+                        background: activeChat?.id === chat.id ? 'var(--glass-hover)' : '',
+                        borderColor: activeChat?.id === chat.id ? 'var(--primary)' : ''
+                      }}
+                    >
+                      <div className="avatar-container" style={{ width: '54px', height: '54px' }}>
+                        <img 
+                          src={avatar} 
+                          alt={name} 
+                          style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+                        />
+                        {isOnline && <div className="online-indicator" />}
+                      </div>
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <span style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-main)' }}>{name}</span>
+                          <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{time}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <p style={{ fontSize: '14px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+                            {lastMessage}
+                          </p>
+                          {unreadCounts?.[chat.id] > 0 && (
+                            <div style={{ 
+                              background: 'var(--primary)', 
+                              color: 'white', 
+                              fontSize: '11px', 
+                              fontWeight: 'bold', 
+                              minWidth: '20px', 
+                              height: '20px', 
+                              borderRadius: '10px', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center', 
+                              padding: '0 6px',
+                              marginLeft: '8px',
+                              boxShadow: '0 0 10px var(--primary-glow)'
+                            }}>
+                              {unreadCounts[chat.id]}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })
+              ) : searchTerm && filteredContacts.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <p style={{ fontSize: '11px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '1px', padding: '12px 16px 8px' }}>CONTACTS</p>
+                  {filteredContacts.map(contact => (
+                    <motion.div
+                      key={contact.id}
+                      variants={itemVariants}
+                      whileHover={{ x: 4 }}
+                      onClick={() => setActiveChat({ 
+                        id: [currentUser.uid, contact.uid || contact.id].sort().join('_'),
+                        uid: contact.uid || contact.id, 
+                        name: contact.name, 
+                        avatar: contact.avatar,
+                        isGroup: false 
+                      })}
+                      className="glass-card"
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '16px', 
+                        padding: '12px 16px', 
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <div className="avatar-container" style={{ width: '44px', height: '44px' }}>
+                        <img 
+                          src={contact.avatar} 
+                          alt={contact.name} 
+                          style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+                        />
+                      </div>
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <p style={{ fontWeight: '700', fontSize: '15px', color: 'var(--text-main)' }}>{contact.name}</p>
+                        <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Start a new transmission</p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : searchTerm ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)' }}>
+                  <Search size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
+                  <p>No results for "{searchTerm}"</p>
+                  <button 
+                    onClick={onAddUser}
+                    style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', marginTop: '12px', fontWeight: 'bold', fontSize: '14px' }}
                   >
-                    <div className="avatar-container" style={{ width: '54px', height: '54px' }}>
-                      <img 
-                        src={avatar} 
-                        alt={name} 
-                        style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
-                      />
-                      {isOnline && <div className="online-indicator" />}
-                    </div>
-                    <div style={{ flex: 1, overflow: 'hidden' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <span style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-main)' }}>{name}</span>
-                        <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{time}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <p style={{ fontSize: '14px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
-                          {lastMessage}
-                        </p>
-                        {unreadCounts?.[chat.id] > 0 && (
-                          <div style={{ 
-                            background: 'var(--primary)', 
-                            color: 'white', 
-                            fontSize: '11px', 
-                            fontWeight: 'bold', 
-                            minWidth: '20px', 
-                            height: '20px', 
-                            borderRadius: '10px', 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'center', 
-                            padding: '0 6px',
-                            marginLeft: '8px',
-                            boxShadow: '0 0 10px var(--primary-glow)'
-                          }}>
-                            {unreadCounts[chat.id]}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
+                    Search Nebula Network
+                  </button>
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)' }}>
+                  <MessageSquare size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
+                  <p>No conversations yet</p>
+                </div>
+              )}
             </motion.div>
           ) : sidebarTab === 'contacts' ? (
             <motion.div
@@ -215,7 +293,7 @@ const Sidebar = ({
               exit={{ opacity: 0 }}
               style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
             >
-              {contacts.length > 0 ? contacts.map((contact) => (
+              {filteredContacts.length > 0 ? filteredContacts.map((contact) => (
                 <motion.div
                   key={contact.id}
                   variants={itemVariants}
@@ -251,7 +329,18 @@ const Sidebar = ({
                     <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{contact.email}</p>
                   </div>
                 </motion.div>
-              )) : (
+              )) : searchTerm ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)' }}>
+                  <Search size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
+                  <p>No results for "{searchTerm}"</p>
+                  <button 
+                    onClick={() => setSearchTerm('')}
+                    style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', marginTop: '8px', fontWeight: 'bold' }}
+                  >
+                    Clear search
+                  </button>
+                </div>
+              ) : (
                 <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)' }}>
                   <Users size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
                   <p>Your nebula is empty.</p>
@@ -268,7 +357,7 @@ const Sidebar = ({
               exit={{ opacity: 0 }}
               style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
             >
-              {callHistory.length > 0 ? callHistory.map((call) => {
+              {filteredCalls.length > 0 ? filteredCalls.map((call) => {
                 const isOutgoing = call.from === currentUser.uid;
                 const otherUserUid = isOutgoing ? call.to : call.from;
                 const isMissed = !isOutgoing && (call.status === 'rejected' || call.status === 'missed');
@@ -307,7 +396,18 @@ const Sidebar = ({
                     </div>
                   </motion.div>
                 );
-              }) : (
+              }) : searchTerm ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)' }}>
+                  <Search size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
+                  <p>No results for "{searchTerm}"</p>
+                  <button 
+                    onClick={() => setSearchTerm('')}
+                    style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', marginTop: '8px', fontWeight: 'bold' }}
+                  >
+                    Clear search
+                  </button>
+                </div>
+              ) : (
                 <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-dim)' }}>
                   <Phone size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
                   <p>No call history yet</p>

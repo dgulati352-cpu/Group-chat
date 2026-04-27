@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { auth, db } from './firebase'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { doc, getDoc, setDoc, serverTimestamp, updateDoc, collection, onSnapshot, query, orderBy, where, addDoc, deleteDoc } from 'firebase/firestore'
@@ -43,7 +44,10 @@ export default function App() {
   const servers = {
     iceServers: [
       {
-        urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'],
+        urls: [
+          'stun:stun1.l.google.com:19302',
+          'stun:stun2.l.google.com:19302',
+        ],
       },
     ],
     iceCandidatePoolSize: 10,
@@ -69,7 +73,7 @@ export default function App() {
           email: user.email,
           online: true,
           lastSeen: serverTimestamp(),
-          searchName: (user.displayName || 'Voyager').toLowerCase(),
+          searchName: (user.displayName || user.email?.split('@')[0] || 'Voyager').toLowerCase(),
           searchEmail: (user.email || '').toLowerCase()
         };
 
@@ -186,8 +190,16 @@ export default function App() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: isVideo
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: isVideo ? {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 24, max: 30 }
+        } : false
       });
 
       const peerConnection = new RTCPeerConnection(servers);
@@ -214,7 +226,13 @@ export default function App() {
       }
     };
 
-    const offerDescription = await peerConnection.createOffer();
+    let offerDescription = await peerConnection.createOffer();
+    if (isVideo) {
+      offerDescription = new RTCSessionDescription({
+        type: offerDescription.type,
+        sdp: setVideoBitrate(offerDescription.sdp, 1000)
+      });
+    }
     await peerConnection.setLocalDescription(offerDescription);
 
     const offer = {
@@ -248,7 +266,9 @@ export default function App() {
       if (!pc.current?.currentRemoteDescription && data?.answer) {
         console.log("Received answer from receiver");
         const answerDescription = new RTCSessionDescription(data.answer);
-        pc.current.setRemoteDescription(answerDescription);
+        pc.current.setRemoteDescription(answerDescription).then(() => {
+          processQueuedCandidates();
+        });
       }
       if (data?.status === 'ended') {
         console.log("Call ended by receiver");
@@ -287,12 +307,21 @@ export default function App() {
 
   const acceptCall = async () => {
     if (!call) return;
+    setCall(prev => ({ ...prev, status: 'connecting' }));
     console.log("Accepting incoming call...");
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: call.isVideo
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: call.isVideo ? {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 24, max: 30 }
+        } : false
       });
 
       const peerConnection = new RTCPeerConnection(servers);
@@ -321,8 +350,15 @@ export default function App() {
     };
 
     await peerConnection.setRemoteDescription(new RTCSessionDescription(call.offer));
+    processQueuedCandidates();
 
-    const answerDescription = await peerConnection.createAnswer();
+    let answerDescription = await peerConnection.createAnswer();
+    if (call.isVideo) {
+      answerDescription = new RTCSessionDescription({
+        type: answerDescription.type,
+        sdp: setVideoBitrate(answerDescription.sdp, 1000)
+      });
+    }
     await peerConnection.setLocalDescription(answerDescription);
 
     const answer = {
@@ -501,7 +537,36 @@ export default function App() {
     }
   };
 
-  const handleDeleteMessage = async (messageId, mode) => {
+  const setVideoBitrate = (sdp, maxBitrate) => {
+    let lines = sdp.split('\r\n');
+    let mVideoLineIndex = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].indexOf('m=video') === 0) {
+        mVideoLineIndex = i;
+        break;
+      }
+    }
+    if (mVideoLineIndex === -1) return sdp;
+
+    // Check if b=AS line already exists
+    let bLineIndex = -1;
+    for (let i = mVideoLineIndex + 1; i < lines.length; i++) {
+      if (lines[i].indexOf('m=') === 0) break; // Next media section
+      if (lines[i].indexOf('b=AS:') === 0) {
+        bLineIndex = i;
+        break;
+      }
+    }
+
+    if (bLineIndex !== -1) {
+      lines[bLineIndex] = `b=AS:${maxBitrate}`;
+    } else {
+      lines.splice(mVideoLineIndex + 1, 0, `b=AS:${maxBitrate}`);
+    }
+    return lines.join('\r\n');
+  };
+
+  const handleDeleteMessage = async (messageId, mode = 'me') => {
     if (!activeChat || !currentUser) return;
     const otherId = activeChat.uid || activeChat.id;
     const chatId = activeChat.isGroup ? activeChat.id : getChatId(currentUser.uid, otherId);
@@ -576,11 +641,26 @@ export default function App() {
   if (loading) {
     return (
       <div style={{ backgroundColor: '#020617', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-          style={{ width: '40px', height: '40px', border: '4px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--primary)', borderRadius: '50%' }}
-        />
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', zIndex: 0, opacity: 0.4 }}>
+          <motion.div 
+            animate={{ 
+              opacity: [0.1, 0.2, 0.1],
+            }}
+            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+            style={{ position: 'absolute', width: '800px', height: '800px', background: 'radial-gradient(circle, var(--primary) 0%, transparent 70%)', filter: 'blur(100px)', top: '-200px', left: '-200px' }} 
+          />
+          <motion.div 
+            animate={{ 
+              opacity: [0.05, 0.15, 0.05],
+            }}
+            transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+            style={{ position: 'absolute', width: '700px', height: '700px', background: 'radial-gradient(circle, var(--accent) 0%, transparent 70%)', filter: 'blur(100px)', bottom: '-150px', right: '-150px' }} 
+          />
+        </div>
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
+          <div className="loader" style={{ width: '60px', height: '60px', border: '4px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+          <p style={{ fontSize: '18px', fontWeight: '700', letterSpacing: '0.1em', opacity: 0.8 }}>INITIALIZING NEBULA...</p>
+        </div>
       </div>
     );
   }
@@ -664,22 +744,28 @@ export default function App() {
               }}
             />
 
-            {call && (
-              <CallModal 
-                isIncoming={call.status === 'incoming' || (call.status === 'calling' && call.receiver.uid === currentUser.uid)}
-                caller={call.caller.uid === currentUser.uid ? call.receiver : call.caller}
-                isVideo={call.isVideo}
-                localStream={localStream}
-                remoteStream={remoteStream}
-                onAccept={acceptCall}
-                onReject={rejectCall}
-                onEnd={endCall}
-                call={call}
-              />
+            {createPortal(
+              <AnimatePresence>
+                {call && (
+                  <CallModal 
+                    key={call.id}
+                    isIncoming={call.status === 'incoming' || (call.status === 'calling' && call.receiver.uid === currentUser.uid)}
+                    caller={call.caller.uid === currentUser.uid ? call.receiver : call.caller}
+                    isVideo={call.isVideo}
+                    localStream={localStream}
+                    remoteStream={remoteStream}
+                    onAccept={acceptCall}
+                    onReject={rejectCall}
+                    onEnd={endCall}
+                    call={call}
+                  />
+                )}
+              </AnimatePresence>,
+              document.body
             )}
           </motion.div>
         )}
       </AnimatePresence>
     </div>
-  )
+  );
 }

@@ -73,14 +73,19 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [], onStartCh
         ...exactNameSnapLower.docs.map(doc => ({ uid: doc.id, ...doc.data() }))
       ];
       
-      console.log(`Found ${emailResults.length} by email prefix, ${nameResults.length} by name prefix, ${exactResults.length} by email exact, ${exactNameResults.length} by name exact`);
+      console.log(`Search summary for "${searchTerm}":`, {
+        emailPrefix: emailResults.length,
+        namePrefix: nameResults.length,
+        emailExact: exactResults.length,
+        nameExact: exactNameResults.length
+      });
       
       // Merge and deduplicate
       const combined = [...emailResults, ...nameResults, ...exactResults, ...exactNameResults];
       const unique = Array.from(new Map(combined.map(u => [u.uid, u])).values())
         .filter(user => user.uid !== currentUser?.uid);
       
-      console.log(`Unique results (excluding self): ${unique.length}`);
+      console.log(`Final unique results: ${unique.length}`);
       setSearchResults(unique);
     } catch (error) {
       console.error("Error searching users:", error);
@@ -115,6 +120,16 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [], onStartCh
       onClose();
     }
   };
+
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (searchTerm.trim().length >= 2) {
+        handleSearch();
+      }
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm]);
 
   useEffect(() => {
     if (!searchTerm) setSearchResults([]);
