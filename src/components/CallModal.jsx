@@ -2,12 +2,22 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Phone, PhoneOff, Video, VideoOff, Mic, MicOff, Maximize2, User, Volume2, Shield } from 'lucide-react';
 
-const CallModal = ({ isIncoming, caller, onAccept, onReject, onEnd, localStream, remoteStream, isVideo }) => {
+const CallModal = ({ isIncoming, caller, onAccept, onReject, onEnd, localStream, remoteStream, isVideo, call }) => {
   const localVideoRef = useRef();
   const remoteVideoRef = useRef();
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(!isVideo);
   const [callDuration, setCallDuration] = useState(0);
+
+  useEffect(() => {
+    console.log("CallModal Streams Update:", { 
+      local: localStream?.id, 
+      localTracks: localStream?.getTracks().length,
+      remote: remoteStream?.id,
+      remoteTracks: remoteStream?.getTracks().length,
+      isVideo
+    });
+  }, [localStream, remoteStream, isVideo]);
 
   useEffect(() => {
     let interval;
@@ -195,7 +205,9 @@ const CallModal = ({ isIncoming, caller, onAccept, onReject, onEnd, localStream,
                   
                   {!remoteStream && (
                     <p style={{ color: 'var(--text-muted)', fontSize: '18px', fontWeight: '600', marginTop: '12px' }}>
-                      {isIncoming ? `from ${caller?.name}` : `Searching for ${caller?.name}`}
+                      {call?.status === 'connecting' 
+                        ? 'Requesting Camera/Mic access...' 
+                        : isIncoming ? `from ${caller?.name}` : `Searching for ${caller?.name}`}
                     </p>
                   )}
                 </div>

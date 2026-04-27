@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { auth, db } from './firebase'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { doc, getDoc, setDoc, serverTimestamp, updateDoc, collection, onSnapshot, query, orderBy, where } from 'firebase/firestore'
+import { doc, getDoc, setDoc, serverTimestamp, updateDoc, collection, onSnapshot, query, orderBy, where, addDoc, deleteDoc } from 'firebase/firestore'
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
 import ChatWindow from './components/ChatWindow'
 import SettingsModal from './components/SettingsModal'
 import AddUserModal from './components/AddUserModal'
+import CallModal from './components/CallModal'
 import { AnimatePresence, motion } from 'framer-motion'
 
 export default function App() {
@@ -22,6 +23,23 @@ export default function App() {
   const [contacts, setContacts] = useState([]);
   const [messages, setMessages] = useState([]);
   const [callHistory, setCallHistory] = useState([]);
+  
+  // Call State
+  const [call, setCall] = useState(null); // { id, caller, receiver, status: 'calling'|'incoming'|'active', isVideo }
+  const [localStream, setLocalStream] = useState(null);
+  const [remoteStream, setRemoteStream] = useState(null);
+  const pc = useRef(null);
+  const candidateQueue = useRef([]);
+  const callUnsubs = useRef([]);
+
+  const servers = {
+    iceServers: [
+      {
+        urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'],
+      },
+    ],
+    iceCandidatePoolSize: 10,
+  };
 
   const getChatId = (uid1, uid2) => {
     return [uid1, uid2].sort().join('_');
@@ -50,8 +68,21 @@ export default function App() {
         if (!userSnap.exists()) {
           await setDoc(userRef, userData);
         } else {
-          userData = { ...userSnap.data(), uid: user.uid, online: true };
-          await updateDoc(userRef, { online: true, lastSeen: serverTimestamp() });
+          // Merge existing data but update searchable fields and status
+          const existing = userSnap.data();
+          userData = { 
+            ...existing, 
+            uid: user.uid, 
+            online: true,
+            searchName: (existing.name || user.displayName || 'Voyager').toLowerCase(),
+            searchEmail: (existing.email || user.email || '').toLowerCase()
+          };
+          await updateDoc(userRef, { 
+            online: true, 
+            lastSeen: serverTimestamp(),
+            searchName: userData.searchName,
+            searchEmail: userData.searchEmail
+          });
         }
         
         setCurrentUser(userData);
@@ -79,6 +110,15 @@ export default function App() {
           const contactsList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           setContacts(contactsList);
         });
+
+        // Listen for call history
+        const historyRef = collection(db, 'callHistory');
+        const qHistory = query(historyRef, where('participants', 'array-contains', user.uid));
+        onSnapshot(qHistory, (snap) => {
+          const historyList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          historyList.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+          setCallHistory(historyList);
+        });
       } else {
         setCurrentUser(null);
         setContacts([]);
@@ -93,6 +133,302 @@ export default function App() {
       if (unsubChats) unsubChats();
     };
   }, []);
+
+  // Listen for incoming calls
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const callsRef = collection(db, 'calls');
+    const q = query(callsRef, where('receiver.uid', '==', currentUser.uid), where('status', '==', 'calling'));
+
+    const unsubIncoming = onSnapshot(q, (snap) => {
+      if (!snap.empty && !call) {
+        const callData = { id: snap.docs[0].id, ...snap.docs[0].data() };
+        setCall({ ...callData, status: 'incoming' });
+      }
+    });
+
+    return () => unsubIncoming();
+  }, [currentUser, call]);
+
+  const startCall = async (isVideo) => {
+    if (!currentUser || !activeChat || activeChat.isGroup) {
+      console.warn("Calls are only supported in 1-on-1 chats");
+      return;
+    }
+
+    const callDoc = doc(collection(db, 'calls'));
+    
+    // Set initial connecting state immediately
+    setCall({ 
+      id: callDoc.id, 
+      status: 'connecting',
+      isVideo,
+      receiver: {
+        uid: activeChat.uid || activeChat.id,
+        name: activeChat.name,
+        avatar: activeChat.avatar
+      },
+      caller: {
+        uid: currentUser.uid,
+        name: currentUser.name,
+        avatar: currentUser.avatar
+      }
+    });
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: isVideo
+      });
+
+      const peerConnection = new RTCPeerConnection(servers);
+      
+      stream.getTracks().forEach((track) => {
+        peerConnection.addTrack(track, stream);
+      });
+
+      peerConnection.ontrack = (event) => {
+        console.log("Received remote stream");
+        setRemoteStream(event.streams[0]);
+      };
+
+      setLocalStream(stream);
+      pc.current = peerConnection;
+
+      const offerCandidates = collection(callDoc, 'offerCandidates');
+    const answerCandidates = collection(callDoc, 'answerCandidates');
+
+    peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log("Generated local ICE candidate (offer)");
+        addDoc(offerCandidates, event.candidate.toJSON());
+      }
+    };
+
+    const offerDescription = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offerDescription);
+
+    const offer = {
+      sdp: offerDescription.sdp,
+      type: offerDescription.type,
+    };
+
+    const callData = {
+      caller: {
+        uid: currentUser.uid,
+        name: currentUser.name,
+        avatar: currentUser.avatar
+      },
+      receiver: {
+        uid: activeChat.uid || activeChat.id,
+        name: activeChat.name,
+        avatar: activeChat.avatar
+      },
+      status: 'calling',
+      isVideo,
+      offer,
+      timestamp: serverTimestamp()
+    };
+
+    await setDoc(callDoc, callData);
+    setCall(prev => ({ ...prev, ...callData, status: 'calling' }));
+
+    // Listen for answer
+    const unsubAnswer = onSnapshot(callDoc, (snapshot) => {
+      const data = snapshot.data();
+      if (!pc.current?.currentRemoteDescription && data?.answer) {
+        console.log("Received answer from receiver");
+        const answerDescription = new RTCSessionDescription(data.answer);
+        pc.current.setRemoteDescription(answerDescription);
+      }
+      if (data?.status === 'ended') {
+        console.log("Call ended by receiver");
+        endCall();
+      }
+    });
+
+    // Listen for ICE candidates from receiver
+    const unsubIce = onSnapshot(answerCandidates, (snapshot) => {
+      snapshot.docChanges().forEach(async (change) => {
+        if (change.type === 'added') {
+          const candidateData = change.doc.data();
+          if (pc.current && pc.current.remoteDescription) {
+            console.log("Adding remote ICE candidate (answer)");
+            try {
+              await pc.current.addIceCandidate(new RTCIceCandidate(candidateData));
+            } catch (e) {
+              console.error("Error adding remote ICE candidate:", e);
+            }
+          } else {
+            console.log("Queueing remote ICE candidate (answer)");
+            candidateQueue.current.push(candidateData);
+          }
+        }
+      });
+    });
+
+    callUnsubs.current.push(unsubAnswer, unsubIce);
+    } catch (err) {
+      console.error("Failed to start call:", err);
+      alert("Could not access camera or microphone. Please check permissions.");
+      setCall(null);
+      setLocalStream(null);
+    }
+  };
+
+  const acceptCall = async () => {
+    if (!call) return;
+    console.log("Accepting incoming call...");
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: call.isVideo
+      });
+
+      const peerConnection = new RTCPeerConnection(servers);
+
+      stream.getTracks().forEach((track) => {
+        peerConnection.addTrack(track, stream);
+      });
+
+      peerConnection.ontrack = (event) => {
+        console.log("Received remote stream (acceptor)");
+        setRemoteStream(event.streams[0]);
+      };
+
+      setLocalStream(stream);
+      pc.current = peerConnection;
+
+    const callDoc = doc(db, 'calls', call.id);
+    const offerCandidates = collection(callDoc, 'offerCandidates');
+    const answerCandidates = collection(callDoc, 'answerCandidates');
+
+    peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log("Generated local ICE candidate (answer)");
+        addDoc(answerCandidates, event.candidate.toJSON());
+      }
+    };
+
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(call.offer));
+
+    const answerDescription = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answerDescription);
+
+    const answer = {
+      type: answerDescription.type,
+      sdp: answerDescription.sdp,
+    };
+
+    await updateDoc(callDoc, { answer, status: 'active' });
+    setCall(prev => ({ ...prev, status: 'active' }));
+
+    // Listen for ICE candidates from caller
+    const unsubIce = onSnapshot(offerCandidates, (snapshot) => {
+      snapshot.docChanges().forEach(async (change) => {
+        if (change.type === 'added') {
+          const data = change.doc.data();
+          if (pc.current && pc.current.remoteDescription) {
+            console.log("Adding remote ICE candidate (offer)");
+            try {
+              await pc.current.addIceCandidate(new RTCIceCandidate(data));
+            } catch (e) {
+              console.error("Error adding remote ICE candidate:", e);
+            }
+          } else {
+            console.log("Queueing remote ICE candidate (offer)");
+            candidateQueue.current.push(data);
+          }
+        }
+      });
+    });
+
+    // Listen for call end
+    const unsubEnd = onSnapshot(callDoc, (snapshot) => {
+      const data = snapshot.data();
+      if (data?.status === 'ended') {
+        console.log("Call ended by caller");
+        endCall();
+      }
+    });
+
+    callUnsubs.current.push(unsubIce, unsubEnd);
+    } catch (err) {
+      console.error("Failed to accept call:", err);
+      alert("Could not access camera or microphone. Please check permissions.");
+      rejectCall();
+    }
+  };
+
+  const rejectCall = async () => {
+    if (!call) return;
+    console.log("Rejecting call...");
+    await updateDoc(doc(db, 'calls', call.id), { status: 'ended' });
+    setCall(null);
+  };
+
+  const endCall = async () => {
+    console.log("Ending call and cleaning up...");
+    
+    // Clear Firestore listeners
+    callUnsubs.current.forEach(unsub => unsub());
+    callUnsubs.current = [];
+
+    if (pc.current) {
+      pc.current.close();
+      pc.current = null;
+    }
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      setLocalStream(null);
+    }
+    setRemoteStream(null);
+    
+    candidateQueue.current = [];
+    
+    if (call) {
+      const callId = call.id;
+      const wasAccepted = !!remoteStream;
+      setCall(null); // Clear local state first to avoid re-triggering
+      try {
+        await updateDoc(doc(db, 'calls', callId), { status: 'ended' });
+        
+        // Save to history
+        await addDoc(collection(db, 'callHistory'), {
+          from: call.caller.uid,
+          to: call.receiver.uid,
+          participants: [call.caller.uid, call.receiver.uid],
+          status: wasAccepted ? 'completed' : 'missed',
+          isVideo: call.isVideo,
+          createdAt: serverTimestamp()
+        });
+      } catch (e) {
+        console.warn("Could not update call doc to ended:", e);
+      }
+    }
+  };
+
+  const processQueuedCandidates = async () => {
+    if (pc.current && pc.current.remoteDescription && candidateQueue.current.length > 0) {
+      console.log(`Processing ${candidateQueue.current.length} queued ICE candidates`);
+      for (const candidate of candidateQueue.current) {
+        try {
+          await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.error("Error adding queued ICE candidate:", e);
+        }
+      }
+      candidateQueue.current = [];
+    }
+  };
+
+  useEffect(() => {
+    if (pc.current?.remoteDescription) {
+      processQueuedCandidates();
+    }
+  }, [pc.current?.remoteDescription, call?.status]);
 
   useEffect(() => {
     if (!currentUser || !activeChat) {
@@ -133,23 +469,85 @@ export default function App() {
 
       const newMessage = {
         ...msgData,
-        senderId: currentUser.uid,
-        senderName: currentUser.name,
-        senderAvatar: currentUser.avatar,
-        timestamp: serverTimestamp()
+        userUid: currentUser.uid,
+        userName: currentUser.name,
+        userAvatar: currentUser.avatar,
+        senderId: currentUser.uid, // Keep for backward compatibility if needed
+        timestamp: serverTimestamp(),
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        read: false,
+        seenBy: [currentUser.uid]
       };
 
-      await setDoc(doc(msgsRef), newMessage);
+      await addDoc(msgsRef, newMessage);
       console.log("Message sent successfully!");
 
       const chatRef = doc(db, 'chats', chatId);
       await setDoc(chatRef, {
-        lastMessage: msgData.text || (msgData.image ? 'Image' : 'File'),
+        lastMessage: msgData.text || (msgData.image ? 'Image' : (msgData.audio ? 'Voice' : 'File')),
         lastMessageTime: serverTimestamp(),
         participants: activeChat.isGroup ? activeChat.participants : [currentUser.uid, otherId]
       }, { merge: true });
     } catch (error) {
       console.error("Error sending message:", error);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId, mode) => {
+    if (!activeChat || !currentUser) return;
+    const otherId = activeChat.uid || activeChat.id;
+    const chatId = activeChat.isGroup ? activeChat.id : getChatId(currentUser.uid, otherId);
+    const msgRef = doc(db, 'chats', chatId, 'messages', messageId);
+
+    try {
+      if (mode === 'everyone') {
+        await updateDoc(msgRef, {
+          deletedForEveryone: true,
+          text: 'Transmission terminated',
+          image: null,
+          audio: null
+        });
+      } else {
+        const msgSnap = await getDoc(msgRef);
+        if (msgSnap.exists()) {
+          const data = msgSnap.data();
+          const deletedFor = data.deletedFor || [];
+          if (!deletedFor.includes(currentUser.uid)) {
+            await updateDoc(msgRef, {
+              deletedFor: [...deletedFor, currentUser.uid]
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting message:", error);
+    }
+  };
+
+  const handleClearChat = async () => {
+    if (!activeChat || !currentUser) return;
+    if (!window.confirm("Are you sure you want to clear all transmissions? This cannot be undone.")) return;
+
+    const otherId = activeChat.uid || activeChat.id;
+    const chatId = activeChat.isGroup ? activeChat.id : getChatId(currentUser.uid, otherId);
+    const msgsRef = collection(db, 'chats', chatId, 'messages');
+
+    try {
+      const snap = await getDocs(msgsRef);
+      const deletePromises = snap.docs.map(doc => {
+        const data = doc.data();
+        const deletedFor = data.deletedFor || [];
+        if (!deletedFor.includes(currentUser.uid)) {
+          return updateDoc(doc.ref, {
+            deletedFor: [...deletedFor, currentUser.uid]
+          });
+        }
+        return Promise.resolve();
+      });
+      await Promise.all(deletePromises);
+      console.log("Chat cleared for user");
+    } catch (error) {
+      console.error("Error clearing chat:", error);
     }
   };
 
@@ -222,8 +620,16 @@ export default function App() {
               messages={messages}
               currentUser={currentUser}
               onSendMessage={handleSendMessage}
+              onDeleteMessage={handleDeleteMessage}
+              onClearChat={handleClearChat}
               onBack={() => setActiveChat(null)}
-              onOpenSettings={() => setIsSettingsOpen(true)}
+              onVoiceCall={() => startCall(false)}
+              onVideoCall={() => startCall(true)}
+              isMobile={isMobile}
+              onOpenGroupInfo={() => setIsGroupInfoOpen(true)}
+              onAddMemberClick={() => setIsAddUserOpen(true)}
+              allUsers={contacts}
+              isAdmin={activeChat?.adminId === currentUser?.uid}
             />
 
             <SettingsModal 
@@ -238,7 +644,31 @@ export default function App() {
               onClose={() => setIsAddUserOpen(false)}
               currentUser={currentUser}
               myContacts={contacts}
+              onStartChat={(user) => {
+                setActiveChat({
+                  id: getChatId(currentUser.uid, user.uid),
+                  uid: user.uid,
+                  name: user.name,
+                  avatar: user.avatar,
+                  isGroup: false
+                });
+                setSidebarTab('chats');
+              }}
             />
+
+            {call && (
+              <CallModal 
+                isIncoming={call.status === 'incoming' || (call.status === 'calling' && call.receiver.uid === currentUser.uid)}
+                caller={call.caller.uid === currentUser.uid ? call.receiver : call.caller}
+                isVideo={call.isVideo}
+                localStream={localStream}
+                remoteStream={remoteStream}
+                onAccept={acceptCall}
+                onReject={rejectCall}
+                onEnd={endCall}
+                call={call}
+              />
+            )}
           </motion.div>
         )}
       </AnimatePresence>

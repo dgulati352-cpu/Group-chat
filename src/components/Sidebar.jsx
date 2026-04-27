@@ -103,20 +103,27 @@ const Sidebar = ({
       </div>
 
       {/* Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '12px', padding: '16px 24px' }}>
+      <div style={{ display: 'flex', gap: '8px', padding: '16px 24px', flexWrap: 'nowrap' }}>
         <button 
           onClick={() => setSidebarTab('chats')}
           className={sidebarTab === 'chats' ? "btn-primary" : "glass-card"} 
-          style={{ flex: 1, height: '44px', gap: '8px', fontSize: '14px' }}
+          style={{ flex: 1, height: '40px', gap: '6px', fontSize: '13px', padding: '0 8px' }}
         >
-          <MessageSquare size={16} /> Chats
+          <MessageSquare size={14} /> Chats
+        </button>
+        <button 
+          onClick={() => setSidebarTab('contacts')}
+          className={sidebarTab === 'contacts' ? "btn-primary" : "glass-card"} 
+          style={{ flex: 1, height: '40px', gap: '6px', fontSize: '13px', padding: '0 8px' }}
+        >
+          <Users size={14} /> People
         </button>
         <button 
           onClick={() => setSidebarTab('calls')}
           className={sidebarTab === 'calls' ? "btn-primary" : "glass-card"} 
-          style={{ flex: 1, height: '44px', gap: '8px', fontSize: '14px' }}
+          style={{ flex: 1, height: '40px', gap: '6px', fontSize: '13px', padding: '0 8px' }}
         >
-          <Phone size={16} /> Calls
+          <Phone size={14} /> Calls
         </button>
       </div>
 
@@ -199,6 +206,59 @@ const Sidebar = ({
                 );
               })}
             </motion.div>
+          ) : sidebarTab === 'contacts' ? (
+            <motion.div
+              key="contacts-list"
+              variants={containerVariants}
+              initial="hidden"
+              animate="show"
+              exit={{ opacity: 0 }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
+            >
+              {contacts.length > 0 ? contacts.map((contact) => (
+                <motion.div
+                  key={contact.id}
+                  variants={itemVariants}
+                  whileHover={{ x: 4 }}
+                  onClick={() => setActiveChat({ 
+                    id: [currentUser.uid, contact.uid || contact.id].sort().join('_'),
+                    uid: contact.uid || contact.id, 
+                    name: contact.name, 
+                    avatar: contact.avatar,
+                    isGroup: false 
+                  })}
+                  className="glass-card"
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '16px', 
+                    padding: '12px 16px', 
+                    cursor: 'pointer',
+                    background: (activeChat?.uid === (contact.uid || contact.id)) ? 'var(--glass-hover)' : '',
+                    borderColor: (activeChat?.uid === (contact.uid || contact.id)) ? 'var(--primary)' : ''
+                  }}
+                >
+                  <div className="avatar-container" style={{ width: '48px', height: '48px' }}>
+                    <img 
+                      src={contact.avatar} 
+                      alt={contact.name} 
+                      style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+                    />
+                    {contact.online && <div className="online-indicator" />}
+                  </div>
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <p style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-main)' }}>{contact.name}</p>
+                    <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{contact.email}</p>
+                  </div>
+                </motion.div>
+              )) : (
+                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)' }}>
+                  <Users size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
+                  <p>Your nebula is empty.</p>
+                  <p style={{ fontSize: '12px' }}>Add people to start chatting.</p>
+                </div>
+              )}
+            </motion.div>
           ) : (
             <motion.div
               key="calls-list"
@@ -208,7 +268,7 @@ const Sidebar = ({
               exit={{ opacity: 0 }}
               style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
             >
-              {callHistory.map((call) => {
+              {callHistory.length > 0 ? callHistory.map((call) => {
                 const isOutgoing = call.from === currentUser.uid;
                 const otherUserUid = isOutgoing ? call.to : call.from;
                 const isMissed = !isOutgoing && (call.status === 'rejected' || call.status === 'missed');

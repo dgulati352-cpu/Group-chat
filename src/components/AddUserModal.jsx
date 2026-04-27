@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Search, UserPlus, Check, Loader2 } from 'lucide-react';
+import { X, Search, UserPlus, Check, Loader2, MessageSquare } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, query, getDocs, where, doc, setDoc, deleteDoc, limit } from 'firebase/firestore';
 
-const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
+const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [], onStartChat }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -28,28 +28,55 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
         where('searchName', '<=', lowerQuery + '\uf8ff'),
         limit(10)
       );
-      // Fallback for full email match (for users not yet indexed)
+      // Fallback for full email match (case-insensitive check)
       const exactEmailQuery = query(
         usersRef,
         where('email', '==', searchTerm.trim()),
         limit(1)
       );
+      const exactEmailQueryLower = query(
+        usersRef,
+        where('email', '==', searchTerm.trim().toLowerCase()),
+        limit(1)
+      );
+
+      // Fallback for name match (case-insensitive check)
+      const exactNameQuery = query(
+        usersRef,
+        where('name', '==', searchTerm.trim()),
+        limit(5)
+      );
+      const exactNameQueryLower = query(
+        usersRef,
+        where('name', '==', searchTerm.trim().toLowerCase()),
+        limit(5)
+      );
 
       console.log(`Searching for "${searchTerm}"...`);
-      const [emailSnap, nameSnap, exactSnap] = await Promise.all([
+      const [emailSnap, nameSnap, exactSnap, exactSnapLower, exactNameSnap, exactNameSnapLower] = await Promise.all([
         getDocs(emailQuery),
         getDocs(nameQuery),
-        getDocs(exactEmailQuery)
+        getDocs(exactEmailQuery),
+        getDocs(exactEmailQueryLower),
+        getDocs(exactNameQuery),
+        getDocs(exactNameQueryLower)
       ]);
 
       const emailResults = emailSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
       const nameResults = nameSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
-      const exactResults = exactSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+      const exactResults = [
+        ...exactSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() })),
+        ...exactSnapLower.docs.map(doc => ({ uid: doc.id, ...doc.data() }))
+      ];
+      const exactNameResults = [
+        ...exactNameSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() })),
+        ...exactNameSnapLower.docs.map(doc => ({ uid: doc.id, ...doc.data() }))
+      ];
       
-      console.log(`Found ${emailResults.length} by email, ${nameResults.length} by name, ${exactResults.length} by exact match`);
+      console.log(`Found ${emailResults.length} by email prefix, ${nameResults.length} by name prefix, ${exactResults.length} by email exact, ${exactNameResults.length} by name exact`);
       
       // Merge and deduplicate
-      const combined = [...emailResults, ...nameResults, ...exactResults];
+      const combined = [...emailResults, ...nameResults, ...exactResults, ...exactNameResults];
       const unique = Array.from(new Map(combined.map(u => [u.uid, u])).values())
         .filter(user => user.uid !== currentUser?.uid);
       
@@ -79,6 +106,13 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
       }
     } catch (error) {
       console.error("Error toggling contact:", error);
+    }
+  };
+
+  const handleMessage = (user) => {
+    if (onStartChat) {
+      onStartChat(user);
+      onClose();
     }
   };
 
@@ -250,26 +284,49 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
                           <p style={{ fontWeight: '700', fontSize: '15px', color: 'white', marginBottom: '2px' }}>{user.name}</p>
                           <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '500' }}>{user.email}</p>
                         </div>
-                        <motion.button 
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => toggleContact(user)}
-                          style={{ 
-                            width: '38px',
-                            height: '38px',
-                            borderRadius: '12px', 
-                            background: myContacts.some(c => c.uid === user.uid) ? 'var(--accent)' : 'var(--primary)',
-                            color: 'white',
-                            border: 'none',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
-                          }}
-                        >
-                          {myContacts.some(c => c.uid === user.uid) ? <Check size={20} strokeWidth={3} /> : <UserPlus size={20} strokeWidth={2.5} />}
-                        </motion.button>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <motion.button 
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => handleMessage(user)}
+                            title="Send Message"
+                            style={{ 
+                              width: '38px',
+                              height: '38px',
+                              borderRadius: '12px', 
+                              background: 'rgba(255,255,255,0.05)',
+                              color: 'white',
+                              border: 'none',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            <MessageSquare size={18} strokeWidth={2.5} />
+                          </motion.button>
+                          <motion.button 
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => toggleContact(user)}
+                            title={myContacts.some(c => c.uid === user.uid) ? "Remove Contact" : "Add Contact"}
+                            style={{ 
+                              width: '38px',
+                              height: '38px',
+                              borderRadius: '12px', 
+                              background: myContacts.some(c => c.uid === user.uid) ? 'var(--accent)' : 'var(--primary)',
+                              color: 'white',
+                              border: 'none',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+                            }}
+                          >
+                            {myContacts.some(c => c.uid === user.uid) ? <Check size={20} strokeWidth={3} /> : <UserPlus size={20} strokeWidth={2.5} />}
+                          </motion.button>
+                        </div>
                       </motion.div>
                     ))}
                   </div>
