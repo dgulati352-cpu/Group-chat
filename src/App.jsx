@@ -202,6 +202,7 @@ export default function App() {
               activeChat={activeChat}
               setActiveChat={setActiveChat}
               contacts={contacts}
+              chats={chats}
               currentUser={currentUser}
               sidebarTab={sidebarTab}
               setSidebarTab={setSidebarTab}

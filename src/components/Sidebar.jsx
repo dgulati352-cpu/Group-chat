@@ -6,6 +6,7 @@ const Sidebar = ({
   activeChat, 
   setActiveChat, 
   contacts, 
+  chats,
   currentUser, 
   unreadCounts, 
   callHistory,
@@ -130,63 +131,73 @@ const Sidebar = ({
               exit={{ opacity: 0 }}
               style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
             >
-              {contacts.map((contact) => (
-                <motion.div
-                  key={contact.id}
-                  variants={itemVariants}
-                  whileHover={{ x: 4 }}
-                  onClick={() => setActiveChat(contact)}
-                  className="glass-card"
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '16px', 
-                    padding: '12px 16px', 
-                    cursor: 'pointer',
-                    background: activeChat?.id === contact.id ? 'var(--glass-hover)' : '',
-                    borderColor: activeChat?.id === contact.id ? 'var(--primary)' : ''
-                  }}
-                >
-                  <div className="avatar-container" style={{ width: '54px', height: '54px' }}>
-                    <img 
-                      src={contact.avatar} 
-                      alt={contact.name} 
-                      style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
-                    />
-                    {contact.online && <div className="online-indicator" />}
-                  </div>
-                  <div style={{ flex: 1, overflow: 'hidden' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-main)' }}>{contact.name}</span>
-                      <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{contact.time}</span>
+              {chats.map((chat) => {
+                const otherId = chat.participants?.find(uid => uid !== currentUser.uid);
+                const contact = contacts.find(c => c.id === otherId);
+                const name = contact ? contact.name : (chat.isGroup ? chat.name : 'Unknown User');
+                const avatar = contact ? contact.avatar : (chat.isGroup ? chat.avatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${otherId}`);
+                const isOnline = contact?.online;
+                const lastMessage = chat.lastMessage || 'No messages yet';
+                const time = formatTime(chat.lastMessageTime);
+
+                return (
+                  <motion.div
+                    key={chat.id}
+                    variants={itemVariants}
+                    whileHover={{ x: 4 }}
+                    onClick={() => setActiveChat({ ...chat, uid: otherId, name, avatar })}
+                    className="glass-card"
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '16px', 
+                      padding: '12px 16px', 
+                      cursor: 'pointer',
+                      background: activeChat?.id === chat.id ? 'var(--glass-hover)' : '',
+                      borderColor: activeChat?.id === chat.id ? 'var(--primary)' : ''
+                    }}
+                  >
+                    <div className="avatar-container" style={{ width: '54px', height: '54px' }}>
+                      <img 
+                        src={avatar} 
+                        alt={name} 
+                        style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+                      />
+                      {isOnline && <div className="online-indicator" />}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <p style={{ fontSize: '14px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
-                        {contact.lastMessage}
-                      </p>
-                      {unreadCounts?.[contact.id] > 0 && (
-                        <div style={{ 
-                          background: 'var(--primary)', 
-                          color: 'white', 
-                          fontSize: '11px', 
-                          fontWeight: 'bold', 
-                          minWidth: '20px', 
-                          height: '20px', 
-                          borderRadius: '10px', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          padding: '0 6px',
-                          marginLeft: '8px',
-                          boxShadow: '0 0 10px var(--primary-glow)'
-                        }}>
-                          {unreadCounts[contact.id]}
-                        </div>
-                      )}
+                    <div style={{ flex: 1, overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <span style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-main)' }}>{name}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{time}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <p style={{ fontSize: '14px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+                          {lastMessage}
+                        </p>
+                        {unreadCounts?.[chat.id] > 0 && (
+                          <div style={{ 
+                            background: 'var(--primary)', 
+                            color: 'white', 
+                            fontSize: '11px', 
+                            fontWeight: 'bold', 
+                            minWidth: '20px', 
+                            height: '20px', 
+                            borderRadius: '10px', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            padding: '0 6px',
+                            marginLeft: '8px',
+                            boxShadow: '0 0 10px var(--primary-glow)'
+                          }}>
+                            {unreadCounts[chat.id]}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </motion.div>
           ) : (
             <motion.div
