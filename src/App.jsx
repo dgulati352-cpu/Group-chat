@@ -196,9 +196,9 @@ export default function App() {
           autoGainControl: true
         },
         video: isVideo ? {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          frameRate: { ideal: 24, max: 30 }
+          width: { ideal: 320, max: 480 },
+          height: { ideal: 240, max: 360 },
+          frameRate: { ideal: 15, max: 15 }
         } : false
       });
 
@@ -230,7 +230,7 @@ export default function App() {
     if (isVideo) {
       offerDescription = new RTCSessionDescription({
         type: offerDescription.type,
-        sdp: setVideoBitrate(offerDescription.sdp, 1000)
+        sdp: setVideoBitrate(offerDescription.sdp, 200)
       });
     }
     await peerConnection.setLocalDescription(offerDescription);
@@ -318,9 +318,9 @@ export default function App() {
           autoGainControl: true
         },
         video: call.isVideo ? {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          frameRate: { ideal: 24, max: 30 }
+          width: { ideal: 320, max: 480 },
+          height: { ideal: 240, max: 360 },
+          frameRate: { ideal: 15, max: 15 }
         } : false
       });
 
@@ -356,7 +356,7 @@ export default function App() {
     if (call.isVideo) {
       answerDescription = new RTCSessionDescription({
         type: answerDescription.type,
-        sdp: setVideoBitrate(answerDescription.sdp, 1000)
+        sdp: setVideoBitrate(answerDescription.sdp, 200)
       });
     }
     await peerConnection.setLocalDescription(answerDescription);
