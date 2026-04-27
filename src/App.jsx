@@ -23,6 +23,14 @@ export default function App() {
   const [contacts, setContacts] = useState([]);
   const [messages, setMessages] = useState([]);
   const [callHistory, setCallHistory] = useState([]);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   // Call State
   const [call, setCall] = useState(null); // { id, caller, receiver, status: 'calling'|'incoming'|'active', isVideo }
