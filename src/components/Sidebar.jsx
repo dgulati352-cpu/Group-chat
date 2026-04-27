@@ -307,7 +307,12 @@ const Sidebar = ({
                     </div>
                   </motion.div>
                 );
-              })}
+              }) : (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-dim)' }}>
+                  <Phone size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
+                  <p>No call history yet</p>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
