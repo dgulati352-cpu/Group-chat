@@ -24,19 +24,23 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
         where('searchName', '<=', searchTerm.toLowerCase() + '\uf8ff')
       );
 
+      console.log(`Searching for "${searchTerm}"...`);
       const [emailSnap, nameSnap] = await Promise.all([
         getDocs(emailQuery),
         getDocs(nameQuery)
       ]);
 
-      const emailResults = emailSnap.docs.map(doc => doc.data());
-      const nameResults = nameSnap.docs.map(doc => doc.data());
+      const emailResults = emailSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+      const nameResults = nameSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+      
+      console.log(`Found ${emailResults.length} by email, ${nameResults.length} by name`);
       
       // Merge and deduplicate
       const combined = [...emailResults, ...nameResults];
       const unique = Array.from(new Map(combined.map(u => [u.uid, u])).values())
         .filter(user => user.uid !== currentUser?.uid);
       
+      console.log(`Unique results (excluding self): ${unique.length}`);
       setSearchResults(unique);
     } catch (error) {
       console.error("Error searching users:", error);

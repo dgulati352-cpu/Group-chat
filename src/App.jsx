@@ -58,6 +58,7 @@ export default function App() {
         if (unsubContacts) unsubContacts();
         const contactsRef = collection(db, 'users', user.uid, 'contacts');
         unsubContacts = onSnapshot(contactsRef, (snap) => {
+          console.log(`Received ${snap.docs.length} contacts for user ${user.uid}`);
           const contactsList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           setContacts(contactsList);
         });
@@ -84,41 +85,57 @@ export default function App() {
       return;
     }
 
-    const chatId = activeChat.isGroup ? activeChat.id : getChatId(currentUser.uid, activeChat.uid || activeChat.id);
+    const otherId = activeChat.uid || activeChat.id;
+    const chatId = activeChat.isGroup ? activeChat.id : getChatId(currentUser.uid, otherId);
+    console.log(`Setting up message listener for chatId: ${chatId} (Other user: ${otherId})`);
+
     const msgsRef = collection(db, 'chats', chatId, 'messages');
     const q = query(msgsRef, orderBy('timestamp', 'asc'));
 
     const unsubMessages = onSnapshot(q, (snap) => {
+      console.log(`Received ${snap.docs.length} messages for ${chatId}`);
       const msgs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setMessages(msgs);
+    }, (error) => {
+      console.error("Error in message listener:", error);
     });
 
     return () => unsubMessages();
   }, [activeChat, currentUser]);
 
   const handleSendMessage = async (msgData) => {
-    if (!currentUser || !activeChat) return;
+    if (!currentUser || !activeChat) {
+      console.warn("Cannot send message: currentUser or activeChat missing");
+      return;
+    }
 
-    const chatId = activeChat.isGroup ? activeChat.id : getChatId(currentUser.uid, activeChat.uid || activeChat.id);
-    const msgsRef = collection(db, 'chats', chatId, 'messages');
+    try {
+      const otherId = activeChat.uid || activeChat.id;
+      const chatId = activeChat.isGroup ? activeChat.id : getChatId(currentUser.uid, otherId);
+      console.log(`Sending message to ${chatId}...`);
 
-    const newMessage = {
-      ...msgData,
-      senderId: currentUser.uid,
-      senderName: currentUser.name,
-      senderAvatar: currentUser.avatar,
-      timestamp: serverTimestamp()
-    };
+      const msgsRef = collection(db, 'chats', chatId, 'messages');
 
-    await setDoc(doc(msgsRef), newMessage);
+      const newMessage = {
+        ...msgData,
+        senderId: currentUser.uid,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar,
+        timestamp: serverTimestamp()
+      };
 
-    // Update last message in chat summary (optional but good)
-    const chatRef = doc(db, 'chats', chatId);
-    await setDoc(chatRef, {
-      lastMessage: msgData.text || (msgData.image ? 'Image' : 'File'),
-      lastMessageTime: serverTimestamp(),
-      participants: activeChat.isGroup ? activeChat.participants : [currentUser.uid, activeChat.uid || activeChat.id]
-    }, { merge: true });
+      await setDoc(doc(msgsRef), newMessage);
+      console.log("Message sent successfully!");
+
+      const chatRef = doc(db, 'chats', chatId);
+      await setDoc(chatRef, {
+        lastMessage: msgData.text || (msgData.image ? 'Image' : 'File'),
+        lastMessageTime: serverTimestamp(),
+        participants: activeChat.isGroup ? activeChat.participants : [currentUser.uid, otherId]
+      }, { merge: true });
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
   };
 
   const handleLogout = async () => {
