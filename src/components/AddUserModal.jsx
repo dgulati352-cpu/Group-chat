@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Search, UserPlus, Check } from 'lucide-react';
+import { X, Search, UserPlus, Check, Loader2 } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, query, getDocs, where, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
@@ -72,88 +72,204 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
   return (
     <AnimatePresence>
       {isOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <div style={{ 
+          position: 'fixed', 
+          inset: 0, 
+          zIndex: 2000, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          padding: '20px' 
+        }}>
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            style={{ position: 'absolute', inset: 0, background: 'rgba(2, 6, 23, 0.8)', backdropFilter: 'blur(8px)' }}
+            style={{ 
+              position: 'absolute', 
+              inset: 0, 
+              background: 'rgba(2, 6, 23, 0.85)', 
+              backdropFilter: 'blur(12px)' 
+            }}
           />
           
           <motion.div
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            className="glass"
-            style={{ width: '95%', maxWidth: '500px', borderRadius: '24px', position: 'relative', overflow: 'hidden' }}
+            className="glass-panel"
+            style={{ 
+              width: '100%', 
+              maxWidth: '500px', 
+              borderRadius: '32px', 
+              position: 'relative', 
+              overflow: 'hidden',
+              boxShadow: '0 30px 60px -12px rgba(0, 0, 0, 0.5)',
+            }}
           >
-            <div style={{ padding: '24px var(--side-padding, 24px)', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: '700' }}>Add New Contact</h2>
-              <button onClick={onClose} className="glass-hover" style={{ padding: '8px', borderRadius: '10px' }}>
-                <X size={20} />
-              </button>
+            <div style={{ 
+              padding: '24px 32px', 
+              borderBottom: '1px solid var(--glass-border)', 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center' 
+            }}>
+              <h2 className="text-gradient" style={{ fontSize: '22px', fontWeight: '800', letterSpacing: '-0.02em' }}>
+                Add Contact
+              </h2>
+              <motion.button 
+                whileHover={{ rotate: 90, scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={onClose} 
+                style={{ 
+                  background: 'rgba(255,255,255,0.05)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  width: '36px',
+                  height: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={18} />
+              </motion.button>
             </div>
 
-            <div style={{ padding: '24px var(--side-padding, 24px)' }}>
-              <div style={{ position: 'relative', marginBottom: '24px', display: 'flex', gap: '8px' }}>
+            <div style={{ padding: '32px' }}>
+              <div style={{ position: 'relative', marginBottom: '24px', display: 'flex', gap: '12px' }}>
                 <div style={{ position: 'relative', flex: 1 }}>
-                  <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                  <Search size={18} style={{ 
+                    position: 'absolute', 
+                    left: '16px', 
+                    top: '50%', 
+                    transform: 'translateY(-50%)', 
+                    color: 'var(--text-muted)' 
+                  }} />
                   <input 
                     type="text" 
-                    placeholder="Search by name or email..." 
+                    placeholder="Name or email..." 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                    style={{ width: '100%', paddingLeft: '40px' }}
+                    style={{ 
+                      width: '100%', 
+                      paddingLeft: '48px',
+                      paddingRight: '16px',
+                      paddingTop: '14px',
+                      paddingBottom: '14px',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--glass-border)',
+                      borderRadius: '16px',
+                      color: 'white',
+                      fontSize: '15px',
+                      outline: 'none',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--glass-border)'}
                   />
                 </div>
-                <button 
+                <motion.button 
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={handleSearch}
                   style={{ 
-                    padding: '0 20px', 
-                    borderRadius: '12px', 
+                    padding: '0 24px', 
+                    borderRadius: '16px', 
                     background: 'var(--primary)', 
                     color: 'white', 
-                    fontWeight: '600' 
+                    fontWeight: '700',
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 8px 16px rgba(139, 92, 246, 0.2)'
                   }}
                 >
                   Search
-                </button>
+                </motion.button>
               </div>
 
-              <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+              <div style={{ maxHeight: '360px', overflowY: 'auto', paddingRight: '4px' }} className="custom-scrollbar">
                 {loading ? (
-                  <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>Searching...</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px', gap: '12px' }}>
+                    <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
+                      <Loader2 size={32} color="var(--primary)" />
+                    </motion.div>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '14px', fontWeight: '500' }}>Finding users...</p>
+                  </div>
                 ) : searchResults.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {searchResults.map(user => (
-                      <div key={user.uid} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)' }}>
-                        <img src={user.avatar} alt={user.name} style={{ width: '40px', height: '40px', borderRadius: '10px' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {searchResults.map((user, idx) => (
+                      <motion.div 
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.05 }}
+                        key={user.uid} 
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '14px', 
+                          padding: '14px', 
+                          borderRadius: '18px', 
+                          background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.05)',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <img 
+                          src={user.avatar} 
+                          alt={user.name} 
+                          style={{ 
+                            width: '44px', 
+                            height: '44px', 
+                            borderRadius: '14px',
+                            background: 'rgba(255,255,255,0.1)'
+                          }} 
+                        />
                         <div style={{ flex: 1 }}>
-                          <p style={{ fontWeight: '600', fontSize: '14px' }}>{user.name}</p>
-                          <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{user.email}</p>
+                          <p style={{ fontWeight: '700', fontSize: '15px', color: 'white', marginBottom: '2px' }}>{user.name}</p>
+                          <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '500' }}>{user.email}</p>
                         </div>
-                        <button 
+                        <motion.button 
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
                           onClick={() => toggleContact(user)}
                           style={{ 
-                            padding: '8px', 
-                            borderRadius: '10px', 
+                            width: '38px',
+                            height: '38px',
+                            borderRadius: '12px', 
                             background: myContacts.includes(user.uid) ? 'var(--accent)' : 'var(--primary)',
                             color: 'white',
                             border: 'none',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
                           }}
                         >
-                          {myContacts.includes(user.uid) ? <Check size={18} /> : <UserPlus size={18} />}
-                        </button>
-                      </div>
+                          {myContacts.includes(user.uid) ? <Check size={20} strokeWidth={3} /> : <UserPlus size={20} strokeWidth={2.5} />}
+                        </motion.button>
+                      </motion.div>
                     ))}
                   </div>
                 ) : searchTerm && !loading ? (
-                  <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>No users found</div>
+                  <div style={{ textAlign: 'center', padding: '40px' }}>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '15px', fontWeight: '500' }}>No cosmic travelers found</p>
+                  </div>
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>Enter an email to start searching</div>
+                  <div style={{ textAlign: 'center', padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ padding: '20px', background: 'rgba(255,255,255,0.02)', borderRadius: '24px' }}>
+                      <Search size={32} color="var(--glass-border)" />
+                    </div>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '14px', fontWeight: '500', lineHeight: '1.5' }}>
+                      Enter a name or email address <br />
+                       to search the Nebula network
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
@@ -165,3 +281,4 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
 };
 
 export default AddUserModal;
+

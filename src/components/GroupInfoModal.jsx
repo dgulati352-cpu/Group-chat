@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, UserPlus, UserMinus, ShieldAlert, ShieldCheck, MoreVertical, LogOut } from 'lucide-react';
+import { X, UserPlus, UserMinus, ShieldAlert, ShieldCheck, MoreVertical, LogOut, Shield } from 'lucide-react';
 import { db } from '../firebase';
 import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 
@@ -27,7 +27,6 @@ const GroupInfoModal = ({ isOpen, onClose, group, currentUser, allUsers = [], on
       setOpenedMemberMenuId(null);
     } catch (error) {
       console.error("Error updating role:", error);
-      alert("Failed to update role");
     }
   };
 
@@ -35,19 +34,16 @@ const GroupInfoModal = ({ isOpen, onClose, group, currentUser, allUsers = [], on
     if (!window.confirm("Are you sure you want to transfer admin rights to this member? You will no longer be an admin.")) return;
     try {
       const groupRef = doc(db, 'groups', group.id);
-      // Ensure the new person is an admin and transfer ownership in one call
       await updateDoc(groupRef, {
         admins: arrayUnion(memberUid),
         createdBy: memberUid
       });
-      // Remove current user from admins in a separate call (as same field cannot be updated twice in one updateDoc)
       await updateDoc(groupRef, {
         admins: arrayRemove(currentUser.uid)
       });
       setOpenedMemberMenuId(null);
     } catch (error) {
       console.error("Error transferring admin:", error);
-      alert("Failed to transfer admin rights");
     }
   };
 
@@ -57,12 +53,11 @@ const GroupInfoModal = ({ isOpen, onClose, group, currentUser, allUsers = [], on
       const groupRef = doc(db, 'groups', group.id);
       await updateDoc(groupRef, {
         members: arrayRemove(memberUid),
-        admins: arrayRemove(memberUid) // Also remove from admins if they were one
+        admins: arrayRemove(memberUid)
       });
       setOpenedMemberMenuId(null);
     } catch (error) {
       console.error("Error removing member:", error);
-      alert("Failed to remove member");
     }
   };
 
@@ -83,134 +78,243 @@ const GroupInfoModal = ({ isOpen, onClose, group, currentUser, allUsers = [], on
   return (
     <AnimatePresence>
       {isOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <div style={{ 
+          position: 'fixed', 
+          inset: 0, 
+          zIndex: 2000, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          padding: '20px' 
+        }}>
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            style={{ position: 'absolute', inset: 0, background: 'rgba(2, 6, 23, 0.8)', backdropFilter: 'blur(12px)' }}
+            style={{ 
+              position: 'absolute', 
+              inset: 0, 
+              background: 'rgba(2, 6, 23, 0.85)', 
+              backdropFilter: 'blur(12px)' 
+            }}
           />
           
           <motion.div
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            className="glass"
+            className="glass-panel"
             style={{ 
               width: '100%', 
-              maxWidth: '450px', 
-              maxHeight: '90vh',
-              borderRadius: '28px', 
+              maxWidth: '480px', 
+              maxHeight: '85vh',
+              borderRadius: '32px', 
               position: 'relative', 
               overflow: 'hidden',
               display: 'flex',
-              flexDirection: 'column'
+              flexDirection: 'column',
+              boxShadow: '0 30px 60px -12px rgba(0, 0, 0, 0.5)',
             }}
           >
             {/* Header / Group Profile */}
-            <div style={{ padding: '40px 24px 24px', textAlign: 'center', position: 'relative', background: 'rgba(255,255,255,0.02)' }}>
-              <button 
+            <div style={{ padding: '48px 32px 32px', textAlign: 'center', position: 'relative', background: 'rgba(255,255,255,0.02)' }}>
+              <motion.button 
+                whileHover={{ rotate: 90, scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
                 onClick={onClose} 
-                style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '50%', padding: '8px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                style={{ 
+                  position: 'absolute', 
+                  top: '24px', 
+                  right: '24px', 
+                  background: 'rgba(255,255,255,0.05)', 
+                  border: 'none', 
+                  borderRadius: '12px', 
+                  width: '36px',
+                  height: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--text-muted)', 
+                  cursor: 'pointer' 
+                }}
               >
-                <X size={20} />
-              </button>
+                <X size={18} />
+              </motion.button>
               
-              <div style={{ position: 'relative', display: 'inline-block', marginBottom: '16px' }}>
-                <img 
+              <div style={{ position: 'relative', display: 'inline-block', marginBottom: '20px' }}>
+                <motion.img 
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
                   src={group.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${group.id}`} 
                   alt={group.name} 
-                  style={{ width: '100px', height: '100px', borderRadius: '32px', objectFit: 'cover', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }} 
+                  style={{ 
+                    width: '120px', 
+                    height: '120px', 
+                    borderRadius: '40px', 
+                    objectFit: 'cover', 
+                    boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
+                    border: '4px solid rgba(255,255,255,0.05)'
+                  }} 
                 />
               </div>
-              <h2 style={{ margin: '0 0 4px', fontSize: '24px', fontWeight: '700', color: 'var(--text-main)' }}>{group.name}</h2>
-              <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>{group.members?.length || 0} members</p>
+              <h2 className="text-gradient" style={{ margin: '0 0 8px', fontSize: '28px', fontWeight: '800', letterSpacing: '-0.02em' }}>
+                {group.name}
+              </h2>
+              <p style={{ margin: 0, fontSize: '15px', color: 'var(--text-muted)', fontWeight: '500' }}>
+                {group.members?.length || 0} cosmic voyagers
+              </p>
             </div>
 
             {/* Actions */}
-            <div style={{ padding: '0 24px 24px', display: 'flex', gap: '12px', justifyContent: 'center' }}>
+            <div style={{ padding: '0 32px 32px', display: 'flex', gap: '12px', justifyContent: 'center' }}>
               {isAdmin && (
-                <button 
+                <motion.button 
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={onAddMemberClick}
-                  className="glass-hover"
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '14px', border: '1px solid var(--glass-border)', color: 'var(--primary)', fontWeight: '600', cursor: 'pointer' }}
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '8px', 
+                    padding: '12px 24px', 
+                    borderRadius: '16px', 
+                    background: 'rgba(139, 92, 246, 0.1)',
+                    border: '1px solid var(--primary)', 
+                    color: 'var(--primary)', 
+                    fontWeight: '700', 
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
                 >
-                  <UserPlus size={18} /> Add Member
-                </button>
+                  <UserPlus size={18} /> Add Voyager
+                </motion.button>
               )}
-              <button 
+              <motion.button 
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={handleLeaveGroup}
-                className="glass-hover"
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '14px', border: '1px solid var(--glass-border)', color: '#ef4444', fontWeight: '600', cursor: 'pointer' }}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  padding: '12px 24px', 
+                  borderRadius: '16px', 
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.5)', 
+                  color: '#ef4444', 
+                  fontWeight: '700', 
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
               >
-                <LogOut size={18} /> Leave
-              </button>
+                <LogOut size={18} /> Leave Nebula
+              </motion.button>
             </div>
 
             {/* Members List */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 80px' }} className="custom-scrollbar">
-              <h3 style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '16px' }}>Participants</h3>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 32px 40px' }} className="custom-scrollbar">
+              <h3 style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '16px', marginLeft: '4px' }}>
+                The Crew
+              </h3>
               
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {members.map(user => {
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {members.map((user, idx) => {
                   const isMemberAdmin = group.admins?.includes(user.uid) || group.createdBy === user.uid;
                   const isMe = user.uid === currentUser?.uid;
 
                   return (
-                    <div 
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.05 }}
                       key={user.uid} 
                       style={{ 
                         display: 'flex', 
                         alignItems: 'center', 
-                        gap: '12px', 
+                        gap: '14px', 
                         padding: '12px', 
-                        borderRadius: '16px',
+                        borderRadius: '20px',
+                        background: 'rgba(255,255,255,0.02)',
+                        border: '1px solid rgba(255,255,255,0.03)',
                         position: 'relative'
                       }}
                     >
-                      <img src={user.avatar} alt={user.name} style={{ width: '44px', height: '44px', borderRadius: '14px', objectFit: 'cover' }} />
+                      <img 
+                        src={user.avatar} 
+                        alt={user.name} 
+                        style={{ 
+                          width: '44px', 
+                          height: '44px', 
+                          borderRadius: '14px', 
+                          objectFit: 'cover',
+                          background: 'rgba(255,255,255,0.05)'
+                        }} 
+                      />
                       <div style={{ flex: 1 }}>
-                        <p style={{ margin: 0, fontWeight: '600', fontSize: '15px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          {user.name} {isMe && <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '400' }}>(You)</span>}
+                        <p style={{ margin: '0 0 2px', fontWeight: '700', fontSize: '15px', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {user.name} {isMe && <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '500', opacity: 0.7 }}>(You)</span>}
                         </p>
-                        <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>{user.email}</p>
+                        <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', fontWeight: '500' }}>{user.email}</p>
                       </div>
                       
                       {isMemberAdmin && (
-                        <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--primary)', color: 'var(--primary)', fontWeight: '500' }}>Admin</span>
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '4px', 
+                          background: 'rgba(139, 92, 246, 0.1)', 
+                          padding: '4px 10px', 
+                          borderRadius: '8px', 
+                          border: '1px solid rgba(139, 92, 246, 0.3)' 
+                        }}>
+                          <Shield size={12} color="var(--primary)" strokeWidth={3} />
+                          <span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: '700' }}>ADMIN</span>
+                        </div>
                       )}
 
                       {isAdmin && !isMe && (
                         <div style={{ position: 'relative' }}>
-                          <button 
+                          <motion.button 
+                            whileHover={{ scale: 1.1, background: 'rgba(255,255,255,0.05)' }}
+                            whileTap={{ scale: 0.9 }}
                             onClick={() => setOpenedMemberMenuId(openedMemberMenuId === user.uid ? null : user.uid)}
-                            className="glass-hover" 
-                            style={{ padding: '6px', borderRadius: '8px', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}
+                            style={{ 
+                              padding: '8px', 
+                              borderRadius: '10px', 
+                              border: 'none', 
+                              background: 'transparent', 
+                              color: 'var(--text-muted)', 
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
                           >
                             <MoreVertical size={18} />
-                          </button>
+                          </motion.button>
 
                           <AnimatePresence>
                             {openedMemberMenuId === user.uid && (
                               <motion.div
-                                initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                initial={{ opacity: 0, scale: 0.95, y: 10 }}
                                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                                className="glass"
+                                exit={{ opacity: 0, scale: 0.95, y: 10 }}
                                 style={{ 
                                   position: 'absolute', 
                                   right: 0, 
                                   top: '100%', 
                                   zIndex: 100, 
-                                  minWidth: '200px', 
-                                  padding: '6px', 
-                                  borderRadius: '18px',
-                                  boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+                                  minWidth: '220px', 
+                                  padding: '8px', 
+                                  borderRadius: '20px',
+                                  background: 'rgba(15, 23, 42, 0.95)',
+                                  backdropFilter: 'blur(20px)',
+                                  boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
                                   marginTop: '8px',
                                   display: 'flex',
                                   flexDirection: 'column',
-                                  gap: '2px',
+                                  gap: '4px',
                                   border: '1px solid var(--glass-border)'
                                 }}
                               >
@@ -218,30 +322,31 @@ const GroupInfoModal = ({ isOpen, onClose, group, currentUser, allUsers = [], on
                                   <button 
                                     onClick={() => handleUpdateRole(user.uid, false)}
                                     className="glass-hover"
-                                    style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '10px' }}
+                                    style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'white', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: '600' }}
                                   >
-                                    <ShieldAlert size={16} /> Dismiss as admin
+                                    <ShieldAlert size={16} /> Dismiss admin
                                   </button>
                                 ) : (
                                   <button 
                                     onClick={() => handleUpdateRole(user.uid, true)}
                                     className="glass-hover"
-                                    style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '10px' }}
+                                    style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'white', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: '600' }}
                                   >
-                                    <ShieldCheck size={16} /> Make group admin
+                                    <ShieldCheck size={16} /> Make admin
                                   </button>
                                 )}
                                 <button 
                                   onClick={() => handleTransferAdmin(user.uid)}
                                   className="glass-hover"
-                                  style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px' }}
+                                  style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: '600' }}
                                 >
-                                  <ShieldCheck size={16} /> Transfer Admin
+                                  <ShieldCheck size={16} /> Transfer Ownership
                                 </button>
+                                <div style={{ height: '1px', background: 'var(--glass-border)', margin: '4px 0' }} />
                                 <button 
                                   onClick={() => handleRemoveMember(user.uid)}
                                   className="glass-hover"
-                                  style={{ width: '100%', padding: '10px 14px', borderRadius: '12px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '10px' }}
+                                  style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: '600' }}
                                 >
                                   <UserMinus size={16} /> Remove from group
                                 </button>
@@ -250,7 +355,7 @@ const GroupInfoModal = ({ isOpen, onClose, group, currentUser, allUsers = [], on
                           </AnimatePresence>
                         </div>
                       )}
-                    </div>
+                    </motion.div>
                   );
                 })}
               </div>
@@ -263,3 +368,4 @@ const GroupInfoModal = ({ isOpen, onClose, group, currentUser, allUsers = [], on
 };
 
 export default GroupInfoModal;
+

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Search, UserPlus, Check } from 'lucide-react';
+import { X, Search, UserPlus, Check, User, Mail, Sparkles } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, query, getDocs, where, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 
@@ -68,102 +68,166 @@ const AddMemberModal = ({ isOpen, onClose, group, currentUser, contacts = [] }) 
   return (
     <AnimatePresence>
       {isOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            style={{ position: 'absolute', inset: 0, background: 'rgba(2, 6, 23, 0.8)', backdropFilter: 'blur(8px)' }}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(2, 6, 23, 0.85)', backdropFilter: 'blur(16px)' }}
           />
           
           <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            initial={{ scale: 0.9, opacity: 0, y: 30 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            className="glass"
-            style={{ width: '95%', maxWidth: '500px', borderRadius: '24px', position: 'relative', overflow: 'hidden' }}
+            exit={{ scale: 0.9, opacity: 0, y: 30 }}
+            className="glass-panel"
+            style={{ 
+              width: '100%', 
+              maxWidth: '520px', 
+              borderRadius: '32px', 
+              position: 'relative', 
+              overflow: 'hidden',
+              boxShadow: '0 40px 100px rgba(0,0,0,0.6)',
+              background: 'rgba(15, 23, 42, 0.6)'
+            }}
           >
-            <div style={{ padding: '24px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {/* Background Glow */}
+            <div style={{ position: 'absolute', width: '200px', height: '200px', background: 'var(--primary)', filter: 'blur(100px)', opacity: 0.1, top: '-50px', right: '-50px', zIndex: 0 }} />
+
+            <div style={{ padding: '32px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }}>
               <div>
-                <h2 style={{ fontSize: '20px', fontWeight: '700' }}>Add to {group?.name || 'Group'}</h2>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Select members to add to the group</p>
+                <h2 className="text-gradient" style={{ fontSize: '24px', fontWeight: '800', margin: 0, letterSpacing: '-0.02em' }}>Expand the Crew</h2>
+                <p style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600', marginTop: '4px' }}>Invite voyagers to <span style={{ color: 'var(--accent)' }}>{group?.name}</span></p>
               </div>
-              <button onClick={onClose} className="glass-hover" style={{ padding: '8px', borderRadius: '10px' }}>
+              <motion.button 
+                whileHover={{ scale: 1.1, background: 'rgba(255,255,255,0.05)' }}
+                whileTap={{ scale: 0.9 }}
+                onClick={onClose} 
+                style={{ padding: '10px', borderRadius: '14px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+              >
                 <X size={20} />
-              </button>
+              </motion.button>
             </div>
 
-            <div style={{ padding: '24px' }}>
-              <div style={{ position: 'relative', marginBottom: '24px', display: 'flex', gap: '8px' }}>
-                <div style={{ position: 'relative', flex: 1 }}>
-                  <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                  <input 
-                    type="text" 
-                    placeholder="Search people..." 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                    style={{ width: '100%', paddingLeft: '40px' }}
-                  />
+            <div style={{ padding: '32px', position: 'relative', zIndex: 1 }}>
+              <div style={{ position: 'relative', marginBottom: '32px' }}>
+                <div style={{ position: 'relative', display: 'flex', gap: '12px' }}>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <Search size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', zIndex: 2 }} />
+                    <input 
+                      type="text" 
+                      placeholder="Identify user (name or email)..." 
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                      style={{ 
+                        width: '100%', 
+                        padding: '16px 16px 16px 48px',
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: '18px',
+                        color: 'white',
+                        fontSize: '15px',
+                        fontWeight: '500',
+                        outline: 'none',
+                        transition: 'all 0.3s ease'
+                      }}
+                    />
+                  </div>
+                  <motion.button 
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleSearch}
+                    className="btn-primary"
+                    style={{ 
+                      padding: '0 24px', 
+                      borderRadius: '18px', 
+                      fontWeight: '800',
+                      letterSpacing: '0.02em',
+                      fontSize: '14px'
+                    }}
+                  >
+                    SCAN
+                  </motion.button>
                 </div>
-                <button 
-                  onClick={handleSearch}
-                  className="primary-button"
-                  style={{ 
-                    padding: '0 20px', 
-                    borderRadius: '12px', 
-                    background: 'var(--primary)', 
-                    color: 'white', 
-                    fontWeight: '600',
-                    border: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Search
-                </button>
               </div>
 
-              <div style={{ maxHeight: '350px', overflowY: 'auto' }} className="custom-scrollbar">
+              <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '4px' }} className="custom-scrollbar">
                 {loading ? (
-                  <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>Searching...</div>
+                  <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                      style={{ width: '40px', height: '40px', border: '3px solid rgba(139, 92, 246, 0.2)', borderTopColor: 'var(--primary)', borderRadius: '50%', margin: '0 auto 16px' }}
+                    />
+                    <p style={{ fontSize: '15px', color: 'var(--text-muted)', fontWeight: '600' }}>Scanning the nebula...</p>
+                  </div>
                 ) : searchResults.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <h4 style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: '800', marginBottom: '4px' }}>
+                      {searchTerm ? 'Scan Results' : 'Suggested Voyagers'}
+                    </h4>
                     {searchResults.map(user => (
-                      <div key={user.uid} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)' }}>
-                        <img src={user.avatar} alt={user.name} style={{ width: '44px', height: '44px', borderRadius: '12px', objectFit: 'cover' }} />
-                        <div style={{ flex: 1 }}>
-                          <p style={{ fontWeight: '600', fontSize: '15px' }}>{user.name}</p>
-                          <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{user.email}</p>
+                      <motion.div 
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        key={user.uid} 
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '16px', 
+                          padding: '14px', 
+                          borderRadius: '20px', 
+                          background: 'rgba(255,255,255,0.02)', 
+                          border: '1px solid rgba(255,255,255,0.05)',
+                          transition: 'all 0.3s ease'
+                        }}
+                      >
+                        <div style={{ position: 'relative' }}>
+                          <img src={user.avatar} alt={user.name} style={{ width: '48px', height: '48px', borderRadius: '16px', objectFit: 'cover' }} />
+                          {user.online && <div style={{ position: 'absolute', bottom: '-2px', right: '-2px', width: '12px', height: '12px', background: 'var(--accent)', borderRadius: '50%', border: '2px solid #0f172a' }} />}
                         </div>
-                        <button 
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontWeight: '700', fontSize: '16px', color: 'white', margin: 0 }}>{user.name}</p>
+                          <p style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: '500', margin: 0 }}>{user.email}</p>
+                        </div>
+                        <motion.button 
+                          whileHover={{ scale: 1.1, background: 'var(--primary)' }}
+                          whileTap={{ scale: 0.9 }}
                           onClick={() => addMember(user)}
                           style={{ 
-                            padding: '10px', 
+                            width: '40px', 
+                            height: '40px', 
                             borderRadius: '12px', 
-                            background: 'var(--primary)',
-                            color: 'white',
+                            background: 'rgba(139, 92, 246, 0.1)',
+                            color: 'var(--primary)',
                             border: 'none',
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.2)'
+                            transition: 'all 0.3s ease'
                           }}
                         >
                           <UserPlus size={18} />
-                        </button>
-                      </div>
+                        </motion.button>
+                      </motion.div>
                     ))}
                   </div>
                 ) : searchTerm && !loading ? (
-                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                    <Search size={40} style={{ opacity: 0.2, marginBottom: '12px' }} />
-                    <p>No new users found</p>
+                  <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                    <div style={{ width: '64px', height: '64px', borderRadius: '24px', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                      <Search size={28} color="var(--text-muted)" opacity={0.5} />
+                    </div>
+                    <p style={{ color: 'var(--text-muted)', fontWeight: '600', fontSize: '16px' }}>Voyager not located in this sector.</p>
                   </div>
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                    <p>Select from your contacts or search above</p>
+                  <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                    <div style={{ width: '64px', height: '64px', borderRadius: '24px', background: 'rgba(139, 92, 246, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                      <Sparkles size={28} color="var(--primary)" opacity={0.5} />
+                    </div>
+                    <p style={{ color: 'var(--text-muted)', fontWeight: '600', fontSize: '16px' }}>Begin a search or select from crew candidates.</p>
                   </div>
                 )}
               </div>
@@ -176,3 +240,4 @@ const AddMemberModal = ({ isOpen, onClose, group, currentUser, contacts = [] }) 
 };
 
 export default AddMemberModal;
+
