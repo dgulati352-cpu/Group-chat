@@ -58,12 +58,14 @@ export default function App() {
 
         // Listen for chats where the user is a participant
         const chatsRef = collection(db, 'chats');
-        const qChats = query(chatsRef, where('participants', 'array-contains', user.uid), orderBy('lastMessageTime', 'desc'));
+        const qChats = query(chatsRef, where('participants', 'array-contains', user.uid));
         
         if (unsubChats) unsubChats();
         unsubChats = onSnapshot(qChats, (snap) => {
           console.log(`Received ${snap.docs.length} chats for user ${user.uid}`);
           const chatsList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          // Sort by time in frontend to avoid index requirement
+          chatsList.sort((a, b) => (b.lastMessageTime?.seconds || 0) - (a.lastMessageTime?.seconds || 0));
           setChats(chatsList);
         }, (err) => {
           console.error("Error listening to chats:", err);

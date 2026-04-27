@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Search, UserPlus, Check, Loader2 } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, query, getDocs, where, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, getDocs, where, doc, setDoc, deleteDoc, limit } from 'firebase/firestore';
 
 const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -13,30 +13,43 @@ const AddUserModal = ({ isOpen, onClose, currentUser, myContacts = [] }) => {
     if (!searchTerm.trim()) return;
     setLoading(true);
     try {
+      const lowerQuery = searchTerm.toLowerCase().trim();
+      const usersRef = collection(db, 'users');
+      
       const emailQuery = query(
-        collection(db, 'users'),
-        where('searchEmail', '>=', searchTerm.toLowerCase()),
-        where('searchEmail', '<=', searchTerm.toLowerCase() + '\uf8ff')
+        usersRef,
+        where('searchEmail', '>=', lowerQuery),
+        where('searchEmail', '<=', lowerQuery + '\uf8ff'),
+        limit(10)
       );
       const nameQuery = query(
-        collection(db, 'users'),
-        where('searchName', '>=', searchTerm.toLowerCase()),
-        where('searchName', '<=', searchTerm.toLowerCase() + '\uf8ff')
+        usersRef,
+        where('searchName', '>=', lowerQuery),
+        where('searchName', '<=', lowerQuery + '\uf8ff'),
+        limit(10)
+      );
+      // Fallback for full email match (for users not yet indexed)
+      const exactEmailQuery = query(
+        usersRef,
+        where('email', '==', searchTerm.trim()),
+        limit(1)
       );
 
       console.log(`Searching for "${searchTerm}"...`);
-      const [emailSnap, nameSnap] = await Promise.all([
+      const [emailSnap, nameSnap, exactSnap] = await Promise.all([
         getDocs(emailQuery),
-        getDocs(nameQuery)
+        getDocs(nameQuery),
+        getDocs(exactEmailQuery)
       ]);
 
       const emailResults = emailSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
       const nameResults = nameSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+      const exactResults = exactSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
       
-      console.log(`Found ${emailResults.length} by email, ${nameResults.length} by name`);
+      console.log(`Found ${emailResults.length} by email, ${nameResults.length} by name, ${exactResults.length} by exact match`);
       
       // Merge and deduplicate
-      const combined = [...emailResults, ...nameResults];
+      const combined = [...emailResults, ...nameResults, ...exactResults];
       const unique = Array.from(new Map(combined.map(u => [u.uid, u])).values())
         .filter(user => user.uid !== currentUser?.uid);
       
